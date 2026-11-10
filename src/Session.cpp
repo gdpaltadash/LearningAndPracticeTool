@@ -155,6 +155,7 @@ namespace mpr {
         if (inLevel) {
             if (auto* pl = PlayLayer::get()) syncStartPos(pl);
         }
+        this->loadMacroPath();
         rememberMacroForLevel();
         return true;
     }
@@ -164,6 +165,7 @@ namespace mpr {
         engine.setMacro(nullptr);
         this->refreshMode();
         macroPath.clear();
+        this->loadMacroPath();
         originX.reset();
         m_waitOrigin = false;
         lastResults.reset();
@@ -452,8 +454,7 @@ namespace mpr {
             reached = progress - 1 + engine.shift();
         }
 
-        // Measure the path while the level is played from its start (nothing to do with the mode).
-        if (!ui.enabled || m_platformer || layer->m_startPosObject || !layer->m_player1) return;
+        if (!ui.enabled || m_platformer || !layer->m_player1) return;
         if (layer->m_player1->m_isDead) return;
         float nan = std::numeric_limits<float>::quiet_NaN();
         float x2 = nan, y2 = nan;
@@ -461,6 +462,17 @@ namespace mpr {
             x2 = layer->m_player2->getPositionX();
             y2 = layer->m_player2->getPositionY();
         }
+
+        // Where the macro takes the player, by macro tick: works from a StartPos too.
+        if (engine.macroDrives() && engine.shift() > mpr::kNeverShift / 2 && !m_mpathKey.empty()) {
+            mpath.record(
+                progress + engine.shift(), layer->m_player1->getPositionX(), layer->m_player1->getPositionY(),
+                x2, y2, true
+            );
+        }
+
+        // Measure the path while the level is played from its start (nothing to do with the mode).
+        if (layer->m_startPosObject) return;
         bool authoritative = engine.macroDrives() && engine.shift() > mpr::kNeverShift / 2;
         path.record(
             pathIndexOf(layer), layer->m_player1->getPositionX(), layer->m_player1->getPositionY(), x2, y2,
@@ -468,7 +480,7 @@ namespace mpr {
         );
 
         // do not lose a long first run if the game is closed abruptly
-        if (path.dirty() && ++m_sinceSave >= 3000) this->savePath();
+        if ((path.dirty() || mpath.dirty()) && ++m_sinceSave >= 3000) this->savePath();
     }
 
     void Session::onInjected(GJBaseGameLayer*, Due const& due) {
@@ -505,9 +517,41 @@ namespace mpr {
             if (!path.deserialize(read.unwrap())) path.clear();
             path.markClean();
         }
+        this->loadMacroPath();
+    }
+
+    std::filesystem::path Session::macroPathFile() const {
+        return Mod::get()->getSaveDir() / "paths" / (m_mpathKey + ".bin");
+    }
+
+    void Session::loadMacroPath() {
+        if (!m_mpathKey.empty() && mpath.dirty() && mpath.size() > 0) {
+            std::error_code ec;
+            std::filesystem::create_directories(macroPathFile().parent_path(), ec);
+            (void)geode::utils::file::writeBinary(macroPathFile(), mpath.serialize());
+        }
+        mpath.clear();
+        mpath.markClean();
+        m_mpathKey.clear();
+        if (m_pathKey.empty() || macroPath.empty()) return;
+
+        uint64_t h = 1469598103934665603ull;
+        for (unsigned char c : geode::utils::string::pathToString(macroPath)) h = (h ^ c) * 1099511628211ull;
+        m_mpathKey = fmt::format("{}.m{:016x}", m_pathKey, h);
+
+        auto read = geode::utils::file::readBinary(macroPathFile());
+        if (read.isOk()) {
+            if (!mpath.deserialize(read.unwrap())) mpath.clear();
+            mpath.markClean();
+        }
     }
 
     void Session::savePath() {
+        if (!m_mpathKey.empty() && mpath.dirty() && mpath.size() > 0) {
+            std::error_code ec;
+            std::filesystem::create_directories(macroPathFile().parent_path(), ec);
+            if (geode::utils::file::writeBinary(macroPathFile(), mpath.serialize()).isOk()) mpath.markClean();
+        }
         if (m_pathKey.empty() || !path.dirty() || path.size() == 0) return;
         std::error_code ec;
         std::filesystem::create_directories(pathFile().parent_path(), ec);
@@ -519,6 +563,10 @@ namespace mpr {
 
     std::optional<cocos2d::CCPoint> Session::pathPointFor(int64_t macroFrame, bool p2) const {
         // an input with frame F is applied by the processCommands call whose progress is F + 1
+        if (auto pt = mpath.nearest(macroFrame - engine.config().frameOffset + 1, 6)) {
+            if (p2 && !std::isnan(pt->x2)) return cocos2d::CCPoint(pt->x2, pt->y2);
+            return cocos2d::CCPoint(pt->x1, pt->y1);
+        }
         int64_t base = 1;
         if (originX) {
             if (!m_originIdx) return std::nullopt;

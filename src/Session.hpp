@@ -69,6 +69,9 @@ namespace mpr {
         Engine engine;
         InputBuffer buffer;
         PathTable path;
+        /// Where the macro itself takes the player, indexed by macro tick (recorded in Watch / Trace,
+        /// also from a StartPos). Used to place the dots inside the level.
+        PathTable mpath;
         UiSettings ui;
         MacroHud* hud = nullptr;
 
@@ -167,11 +170,14 @@ namespace mpr {
         void tryAutoLoadForLevel(GJGameLevel* level);
         void syncStartPos(PlayLayer* pl, bool atReset = false);
         void loadPath(PlayLayer* pl);
+        void loadMacroPath();
+        std::filesystem::path macroPathFile() const;
         void savePath();
         std::filesystem::path pathFile() const;
 
         int m_levelId = 0;
         std::string m_pathKey;
+        std::string m_mpathKey; // key of the macro-space path (level + macro)
         bool m_platformer = false;
         int64_t m_shift = 0;
         int m_sinceSave = 0;

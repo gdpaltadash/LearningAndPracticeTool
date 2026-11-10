@@ -53,6 +53,8 @@ Los puntos dentro del nivel y la sincronización de StartPos salen de esa misma 
 
 - **Trace dice "No match"**: los clicks tuyos ahora se fechan con el mismo reloj con el que la macro se reproduce (el último paso completado), no con el tiempo del nivel en el instante del click. Además el mensaje muestra cuántos frames te separa del input de la macro más cercano, p. ej. `No match (+37f)`: si ese número es siempre parecido, es un desfase constante y se corrige con `Macro frame offset`; si cambia mucho, es que clickeas lejos de la macro.
 
+- **No salen los puntos dentro del nivel (por ejemplo desde un StartPos)**: los puntos necesitan saber por dónde pasa la macro. Ahora, mientras estás en Watch o Trace, el mod guarda el recorrido de la macro (por macro y por nivel, también desde un StartPos). La **primera pasada** en Watch va dibujando los puntos solo hacia atrás; a partir de la segunda (o tras ver la macro hasta donde quieras practicar) ya aparecen todos por delante. Si además juegas el nivel desde el inicio, ese recorrido sirve de respaldo.
+
 ## Estructura
 
 ```
