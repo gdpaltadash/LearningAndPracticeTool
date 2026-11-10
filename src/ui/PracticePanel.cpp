@@ -280,12 +280,14 @@ void PracticePanel::addOriginRow(float y) {
     m_mainLayer->addChildAtPosition(label, Anchor::TopLeft, ccp(kPanelX + 12.f, -y), ccp(0.f, 0.5f));
     m_dynamic.push_back(label);
 
-    char const* names[2] = {"Level start", "StartPos"};
-    for (int i = 0; i < 2; ++i) {
-        auto spr = ButtonSprite::create(names[i], 66, true, "goldFont.fnt", "GJ_button_04.png", 20.f, 0.5f);
+    char const* names[3] = {"Auto", "Level start", "StartPos"};
+    int widths[3] = {40, 66, 56};
+    float centers[3] = {125.f, 182.f, 247.f};
+    for (int i = 0; i < 3; ++i) {
+        auto spr = ButtonSprite::create(names[i], widths[i], true, "goldFont.fnt", "GJ_button_04.png", 20.f, 0.5f);
         auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(PracticePanel::onOrigin));
         btn->setTag(i);
-        m_buttonMenu->addChildAtPosition(btn, Anchor::TopLeft, ccp(kPanelX + 138.f + i * 74.f, -y));
+        m_buttonMenu->addChildAtPosition(btn, Anchor::TopLeft, ccp(kPanelX + centers[i], -y));
         m_dynamic.push_back(btn);
         m_originSprites[i] = spr;
     }
@@ -293,7 +295,12 @@ void PracticePanel::addOriginRow(float y) {
 
 void PracticePanel::onOrigin(CCObject* sender) {
     auto& s = mpr::Session::get();
-    if (static_cast<CCNode*>(sender)->getTag() == 1) {
+    int tag = static_cast<CCNode*>(sender)->getTag();
+    s.autoNote.clear();
+    if (tag == 0) {
+        s.setOriginAuto();
+    }
+    else if (tag == 2) {
         if (!s.setOriginHere()) {
             FLAlertLayer::create(
                 "StartPos needed",
@@ -362,9 +369,9 @@ void PracticePanel::refresh() {
     for (size_t i = 0; i < m_values.size(); ++i) {
         if (m_values[i]) m_values[i]->setString(stepValueText(static_cast<int>(i)).c_str());
     }
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 3; ++i) {
         if (!m_originSprites[i]) continue;
-        bool selected = (i == 1) == s.originX.has_value();
+        bool selected = static_cast<int>(s.originMode) == i;
         m_originSprites[i]->updateBGImage(selected ? "GJ_button_01.png" : "GJ_button_04.png");
     }
     if (m_packName) {

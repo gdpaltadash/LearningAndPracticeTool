@@ -56,8 +56,8 @@ namespace mpr {
         ui.pressColor = readColor("press-color", ui.pressColor);
         ui.releaseColor = readColor("release-color", ui.releaseColor);
         ui.holdColor = readColor("hold-color", ui.holdColor);
-        ui.indicatorOpacity = std::clamp(mod->getSavedValue<int>("indicator-opacity", 90), 5, 100);
-        ui.holdOpacity = std::clamp(mod->getSavedValue<int>("hold-opacity", 55), 5, 100);
+        ui.indicatorOpacity = std::clamp(mod->getSavedValue<int>("indicator-opacity", 90), 1, 100);
+        ui.holdOpacity = std::clamp(mod->getSavedValue<int>("hold-opacity", 55), 1, 100);
         ui.holdLine = mod->getSavedValue<bool>("hold-line", true);
 
         auto pack = mod->getSavedValue<std::string>("click-pack", "");
@@ -139,13 +139,7 @@ namespace mpr {
         }
 
         macroPath = path;
-        {
-            float saved = Mod::get()->getSavedValue<float>(
-                fmt::format("origin-{}", geode::utils::string::pathToString(path)), -1.f
-            );
-            if (saved >= 0.f) originX = saved;
-            else originX.reset();
-        }
+        this->loadOrigin();
         engine.setMacro(result.macro);
         lastResults.reset();
         completeHandled = false;
@@ -167,6 +161,9 @@ namespace mpr {
         macroPath.clear();
         this->loadMacroPath();
         originX.reset();
+        originMode = OriginMode::Auto;
+        m_autoLevelStart = false;
+        autoNote.clear();
         m_waitOrigin = false;
         lastResults.reset();
         startSync = StartSync::None;
@@ -283,6 +280,7 @@ namespace mpr {
 
     std::string Session::startPosHint() const {
         if (!inLevel || !engine.macro()) return "";
+        if (!autoNote.empty()) return autoNote;
         switch (startSync) {
             case StartSync::Uncalibrated:
                 return "Play this level from the start once (any mode) so the macro can be synced.";
@@ -308,6 +306,7 @@ namespace mpr {
         if (atReset) {
             m_hasStartPos = pl->m_startPosObject != nullptr;
             m_spawnX = x;
+            if (m_hasStartPos && !m_pathKey.empty()) Mod::get()->setSavedValue<float>("startpos-" + m_pathKey, x);
         }
         bool startPosLevel = pl->m_startPosObject != nullptr;
         this->refreshOriginIdx();
@@ -326,6 +325,15 @@ namespace mpr {
                     if (auto g = path.findIndexAtX(x)) {
                         // the first step after the reset sees the player at x with tick progress + 1
                         m_shift = toMacroTicks(1, *g) + 1 - (progress + 1) + ui.startAdjust;
+                        startSync = StartSync::Synced;
+                    }
+                    else if (originMode == OriginMode::Auto && !m_autoLevelStart && atReset) {
+                        // nothing to sync a level-start macro with: assume it was recorded from here
+                        originX = x;
+                        this->saveOrigin();
+                        this->refreshOriginIdx();
+                        autoNote = "Auto: macro assumed to start at this StartPos.";
+                        m_shift = 1 - (progress + 1) + ui.startAdjust;
                         startSync = StartSync::Synced;
                     }
                     else {
@@ -365,16 +373,67 @@ namespace mpr {
         if (originX) m_originIdx = path.findIndexAtX(*originX, 12.f);
     }
 
+    void Session::loadOrigin() {
+        auto key = geode::utils::string::pathToString(macroPath);
+        auto* mod = Mod::get();
+        originMode = static_cast<OriginMode>(std::clamp(mod->getSavedValue<int>("origin-mode-" + key, 0), 0, 2));
+        float saved = mod->getSavedValue<float>("origin-" + key, -1.f);
+        if (saved >= 0.f) originX = saved;
+        else originX.reset();
+        m_autoLevelStart = mod->getSavedValue<bool>("autols-" + key, false);
+        autoNote.clear();
+    }
+
     void Session::saveOrigin() {
         if (macroPath.empty()) return;
-        Mod::get()->setSavedValue<float>(
-            fmt::format("origin-{}", geode::utils::string::pathToString(macroPath)),
-            originX ? *originX : -1.f
-        );
+        auto key = geode::utils::string::pathToString(macroPath);
+        auto* mod = Mod::get();
+        mod->setSavedValue<float>("origin-" + key, originX ? *originX : -1.f);
+        mod->setSavedValue<int>("origin-mode-" + key, static_cast<int>(originMode));
+        mod->setSavedValue<bool>("autols-" + key, m_autoLevelStart);
+    }
+
+    void Session::setOriginAuto() {
+        originMode = OriginMode::Auto;
+        originX.reset();
+        m_autoLevelStart = false;
+        autoNote.clear();
+        this->saveOrigin();
+        this->settingsChanged();
+    }
+
+    // Auto mode noticed that the current assumption does not fit: switch to the other one.
+    void Session::autoCorrect() {
+        if (originMode != OriginMode::Auto || macroPath.empty() || !engine.macro()) return;
+        auto* mod = Mod::get();
+        if (!originX && !m_autoLevelStart) {
+            // assumed "starts at the level start" and it does not fit -> a StartPos
+            float cand = m_hasStartPos ? m_spawnX : mod->getSavedValue<float>("startpos-" + m_pathKey, -1.f);
+            if (cand >= 0.f) {
+                originX = cand;
+                this->saveOrigin();
+                autoNote = "Auto: the macro seems to start at a StartPos. Restart the level.";
+            }
+        }
+        else if (originX && m_hasStartPos && std::fabs(m_spawnX - *originX) <= 10.f && !m_autoLevelStart) {
+            // assumed that StartPos and it does not fit -> level start
+            originX.reset();
+            m_autoLevelStart = true;
+            this->saveOrigin();
+            autoNote = "Auto: the macro seems to start at the level start. Restart the level.";
+        }
+    }
+
+    void Session::onDeath() {
+        if (!ui.enabled || originMode != OriginMode::Auto || !engine.macroDrives()) return;
+        if (engine.shift() <= mpr::kNeverShift / 2) return;
+        // a macro that is in sync does not die right after it starts
+        if (reached - engine.startProgress() < engine.tps() * 2.5) this->autoCorrect();
     }
 
     bool Session::setOriginHere() {
         if (!m_hasStartPos || !engine.macro()) return false;
+        originMode = OriginMode::StartPos;
         originX = m_spawnX;
         this->saveOrigin();
         this->settingsChanged();
@@ -382,6 +441,8 @@ namespace mpr {
     }
 
     void Session::setOriginLevelStart() {
+        originMode = OriginMode::LevelStart;
+        m_autoLevelStart = false;
         originX.reset();
         this->saveOrigin();
         this->settingsChanged();
@@ -418,6 +479,9 @@ namespace mpr {
     void Session::onResetLevel(PlayLayer* pl) {
         completeHandled = false;
         reached = 0;
+        outOfSync = false;
+        farMisses = 0;
+        autoNote.clear();
         buffer.reset();
         this->syncStartPos(pl, true);
         if (hud) hud->onNewAttempt();

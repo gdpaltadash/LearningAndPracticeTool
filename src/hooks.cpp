@@ -47,7 +47,8 @@ class $modify(MPGameLayer, GJBaseGameLayer) {
             auto result = session.engine.onUserInput(frame, button, p2, down);
 
             // feedback for what the player did
-            if (session.engine.mode() != mpr::Mode::Watch && session.hud) session.hud->onUser(result);
+            session.noteResult(result);
+            if (!result.ignored && session.engine.mode() != mpr::Mode::Watch && session.hud) session.hud->onUser(result);
 
             if (result.swallow) return; // Watch / Trace: ignored. Buffer with a macro: forwarded later by us.
         }
@@ -117,6 +118,11 @@ class $modify(MPPlayLayer, PlayLayer) {
         }
 
         session.onResetLevel(this);
+    }
+
+    void destroyPlayer(PlayerObject* player, GameObject* object) {
+        mpr::Session::get().onDeath();
+        PlayLayer::destroyPlayer(player, object);
     }
 
     void levelComplete() {

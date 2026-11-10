@@ -58,6 +58,7 @@ namespace mpr {
         bool delayed = false;   // Early Fix: the engine will forward it later
         bool matched = false;   // paired with a macro input
         bool extra = false;     // no macro input to pair with
+        bool ignored = false;   // not scored at all (the macro has not started yet)
         int macroIdx = -1;
         int offset = 0;         // user frame - macro frame (negative = early, positive = late)
         int applyDelay = 0;     // frames the input was delayed by (Early Fix)
@@ -160,6 +161,7 @@ namespace mpr {
             UserResult r;
             if (m_shift <= kNeverShift / 2) {
                 r.swallow = (m_mode == Mode::Watch || m_mode == Mode::Trace) && active();
+                r.ignored = true;
                 return r;
             }
             frame += m_shift;

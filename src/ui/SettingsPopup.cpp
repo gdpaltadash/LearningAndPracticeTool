@@ -8,6 +8,8 @@ namespace {
     // toggle tags
     enum { TogHold = 2, TogIdle = 3, TogUsesMacro = 4 };
     // stepper tags (value label index)
+    // fine steps at the low end so very faint indicators can be picked
+    int stepFor(int v, int dir) { return (v < 10 || (v == 10 && dir < 0)) ? 1 : 5; }
     enum { StepOpacity = 0, StepHoldOpacity = 1, StepWindow = 2, StepDotSize = 3, StepLineWidth = 4 };
     enum { ColPress = 0, ColRelease = 1, ColHold = 2 };
 
@@ -215,8 +217,8 @@ void SettingsPopup::onStep(CCObject* sender) {
     int tag = static_cast<CCNode*>(sender)->getTag();
     int dir = (tag % 2) ? 1 : -1;
     switch (tag / 2) {
-        case StepOpacity: s.ui.indicatorOpacity = std::clamp(s.ui.indicatorOpacity + dir * 5, 5, 100); break;
-        case StepHoldOpacity: s.ui.holdOpacity = std::clamp(s.ui.holdOpacity + dir * 5, 5, 100); break;
+        case StepOpacity: s.ui.indicatorOpacity = std::clamp(s.ui.indicatorOpacity + dir * stepFor(s.ui.indicatorOpacity, dir), 1, 100); break;
+        case StepHoldOpacity: s.ui.holdOpacity = std::clamp(s.ui.holdOpacity + dir * stepFor(s.ui.holdOpacity, dir), 1, 100); break;
         case StepDotSize: s.ui.dotSize = std::clamp(s.ui.dotSize + dir, 2, 14); break;
         case StepLineWidth: s.ui.lineWidth = std::clamp(s.ui.lineWidth + dir, 1, 8); break;
         case StepWindow: {

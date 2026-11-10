@@ -23,8 +23,10 @@ namespace {
         return col(1.f, 0.55f, 0.2f);                     // late
     }
 
+    // CCDrawNode blends with premultiplied alpha (GL_ONE, GL_ONE_MINUS_SRC_ALPHA): without
+    // premultiplying, a low opacity still looks bright.
     ccColor4F fromRgb(ccColor3B c, float a) {
-        return ccColor4F{c.r / 255.f, c.g / 255.f, c.b / 255.f, a};
+        return ccColor4F{c.r / 255.f * a, c.g / 255.f * a, c.b / 255.f * a, a};
     }
 
     ccColor3B toRgb(ccColor4F c) {
@@ -136,6 +138,12 @@ void MacroHud::refreshStatus(mpr::Engine const& engine, int64_t reached) {
             break;
         case mpr::Mode::Trace:
             text = fmt::format("TRACE  {:.1f}%  {}/{}", sum.accuracy, sum.matched, sum.total);
+            if (!mpr::Session::get().autoNote.empty()) {
+                text += "\n" + mpr::Session::get().autoNote;
+            }
+            else if (mpr::Session::get().outOfSync) {
+                text += "\nOUT OF SYNC: recorded from a StartPos? Set 'Macro starts at'";
+            }
             break;
         default:
             break;
@@ -194,7 +202,8 @@ void MacroHud::drawLane(mpr::Engine const& engine, double nowFrame) {
 
     // background
     CCPoint bg[4] = { ccp(left, bottom), ccp(right, bottom), ccp(right, top), ccp(left, top) };
-    m_lane->drawPolygon(bg, 4, col(0.f, 0.f, 0.f, 0.45f), 1.f, col(1.f, 1.f, 1.f, 0.25f));
+    float laneA = std::clamp(static_cast<float>(s.ui.indicatorOpacity) / 100.f, 0.f, 1.f);
+    m_lane->drawPolygon(bg, 4, col(0.f, 0.f, 0.f, 0.45f * laneA), 1.f, col(0.25f * laneA, 0.25f * laneA, 0.25f * laneA, 0.25f * laneA));
 
     double tps = engine.tps();
     double aheadFrames = tps * kLookAheadSeconds;

@@ -19,7 +19,7 @@ protected:
     cocos2d::CCLabelBMFont* m_hint = nullptr;
     cocos2d::CCLabelBMFont* m_packName = nullptr;
     std::array<ButtonSprite*, 2> m_modeSprites{};
-    std::array<ButtonSprite*, 2> m_originSprites{};
+    std::array<ButtonSprite*, 3> m_originSprites{};
     std::array<cocos2d::CCLabelBMFont*, 6> m_values{};
 
     /// nodes of the mode-specific area, removed and rebuilt when the mode changes

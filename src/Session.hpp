@@ -6,6 +6,7 @@
 #include "core/Engine.hpp"
 #include "core/PathTable.hpp"
 
+#include <cstdlib>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -59,7 +60,9 @@ namespace mpr {
         bool finished = false;
     };
 
-    enum class StartSync { None, Synced, Uncalibrated, Waiting };
+    enum class OriginMode { Auto = 0, LevelStart = 1, StartPos = 2 };
+
+enum class StartSync { None, Synced, Uncalibrated, Waiting };
 
     /// Global state of the mod. Everything runs on the main thread.
     class Session {
@@ -85,6 +88,13 @@ namespace mpr {
         /// Where the macro was recorded from (player x). Empty = from the start of the level.
         /// A macro recorded from a StartPos has its frame 0 at that StartPos.
         std::optional<float> originX;
+        /// Auto: the mod works out by itself whether the macro starts at the level start or at a
+        /// StartPos (and remembers it per macro). The other two are the player's explicit choice.
+        OriginMode originMode = OriginMode::Auto;
+        std::string autoNote;            // what Auto just decided, shown in the panel / HUD
+        void setOriginAuto();
+        /// Called when the player dies; an early death of a macro-driven run means it is out of sync.
+        void onDeath();
         bool hasStartPos() const { return m_hasStartPos; }
         /// Marks the StartPos the level was last started from as the macro's origin.
         bool setOriginHere();
@@ -128,6 +138,20 @@ namespace mpr {
         /// Tick the NEXT/CURRENT processCommands call belongs to, 1-based, in the engine's tick rate.
         /// Frame stamped on a real input: the progress reached by the last completed step, which is the
         /// same clock the macro inputs are dispatched with.
+        /// Trace: several clicks in a row landed far away from every macro input. Almost always a macro
+        /// that was recorded from a StartPos while this attempt starts from the beginning.
+        bool outOfSync = false;
+        int farMisses = 0;
+        void noteResult(UserResult const& r) {
+            if (r.ignored) return;
+            if (r.extra && r.hasNearest && std::llabs(r.nearestOffset) > 480) {
+                if (++farMisses >= 2 && !outOfSync) {
+                    outOfSync = true;
+                    this->autoCorrect();
+                }
+            }
+            else if (r.matched) { farMisses = 0; outOfSync = false; }
+        }
         int64_t userFrame() const { return m_lastProgress; }
         int64_t tickOf(GJBaseGameLayer* layer) const;
         /// Same, in the fixed 240 Hz space the path table uses.
@@ -183,6 +207,9 @@ namespace mpr {
         int m_sinceSave = 0;
         float m_spawnX = 0.f;
         int64_t m_lastProgress = 0;
+        bool m_autoLevelStart = false;  // Auto decided: this macro starts at the level start
+        void autoCorrect();
+        void loadOrigin();
         bool m_hasStartPos = false;
         bool m_waitOrigin = false;          // waiting for the player to reach originX
         std::optional<int64_t> m_originIdx; // path index (240 Hz) of originX

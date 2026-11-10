@@ -55,6 +55,12 @@ Los puntos dentro del nivel y la sincronización de StartPos salen de esa misma 
 
 - **No salen los puntos dentro del nivel (por ejemplo desde un StartPos)**: los puntos necesitan saber por dónde pasa la macro. Ahora, mientras estás en Watch o Trace, el mod guarda el recorrido de la macro (por macro y por nivel, también desde un StartPos). La **primera pasada** en Watch va dibujando los puntos solo hacia atrás; a partir de la segunda (o tras ver la macro hasta donde quieras practicar) ya aparecen todos por delante. Si además juegas el nivel desde el inicio, ese recorrido sirve de respaldo.
 
+- **Trace desde el 0% dice "No match" siempre**: casi seguro la macro se grabó desde un StartPos y el mod cree que empieza en el 0%, así que ninguno de tus clicks cae cerca de sus inputs (el aviso muestra algo como `No match (+3000f)`). Solución: inicia el nivel desde el StartPos con el que se grabó, abre el panel, y en **Macro starts at** pulsa **StartPos**. Desde entonces puedes jugar desde el 0%: la macro espera y arranca sola cuando llegas a ese punto (mientras espera, tus clicks no se puntúan). Si varios clicks seguidos caen muy lejos, el HUD de Trace pone `OUT OF SYNC` para avisarte de esto.
+
+- **Opacidad muy alta**: el dibujo ahora mezcla con alpha premultiplicado (antes un valor bajo seguía viéndose brillante), el carril también escala con la opacidad, y el mínimo bajó de 5% a 1% (pasos de 1 por debajo de 10%).
+
+- **Detección automática (Auto)**: la fila **Macro starts at** tiene ahora `Auto` (por defecto), `Level start` y `StartPos`. En Auto el mod decide solo, por macro, si empieza en el 0% o en un StartPos, y lo recuerda: si empiezas desde un StartPos y no hay recorrido guardado para sincronizar, asume que la macro se grabó desde ese StartPos; si luego ve que no encaja (varios clicks de Trace muy lejos, o la macro muere en los primeros 2.5 s), cambia de hipótesis y te avisa con `Restart the level`. Si prefieres decidirlo tú, pulsa `Level start` o `StartPos`.
+
 ## Estructura
 
 ```
