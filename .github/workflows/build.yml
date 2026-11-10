@@ -20,5 +20,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Macro Practice (.geode)
+          name: PaltaDash's Practice Tool (.geode)
           path: ${{ steps.build.outputs.build-output }}
