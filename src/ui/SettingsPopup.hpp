@@ -14,9 +14,10 @@ public:
 
 protected:
     Kind m_kind = Kind::Indicators;
-    std::array<cocos2d::CCLabelBMFont*, 3> m_values{};
+    std::array<cocos2d::CCLabelBMFont*, 5> m_values{};
     std::array<cocos2d::CCNode*, 3> m_swatches{};
     std::array<ButtonSprite*, 4> m_corners{};
+    std::array<ButtonSprite*, 3> m_types{};
 
     bool init(Kind kind);
 
@@ -32,6 +33,7 @@ protected:
     void onStep(cocos2d::CCObject*);
     void onColor(cocos2d::CCObject*);
     void onCorner(cocos2d::CCObject*);
+    void onType(cocos2d::CCObject*);
 
 public:
     static SettingsPopup* create(Kind kind);

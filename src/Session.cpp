@@ -37,11 +37,11 @@ namespace mpr {
         ui.indicatorsWhenIdle = mod->getSavedValue<bool>("indicators-idle", true);
         ui.buffer = mod->getSavedValue<bool>("buffer", false);
         ui.bufferUsesMacro = mod->getSavedValue<bool>("buffer-uses-macro", true);
-        ui.bufferWatermark = mod->getSavedValue<bool>("buffer-watermark", true);
         ui.bufferCorner = static_cast<Corner>(std::clamp(mod->getSavedValue<int>("buffer-corner", 1), 0, 3));
         ui.startAdjust = std::clamp(mod->getSavedValue<int>("start-adjust", 0), -10, 10);
-        ui.showLane = mod->getSavedValue<bool>("show-lane", true);
-        ui.showDots = mod->getSavedValue<bool>("show-dots", true);
+        ui.indicatorType = static_cast<IndicatorType>(std::clamp(mod->getSavedValue<int>("indicator-type", 2), 0, 2));
+        ui.dotSize = std::clamp(mod->getSavedValue<int>("dot-size", 6), 2, 14);
+        ui.lineWidth = std::clamp(mod->getSavedValue<int>("line-width", 2), 1, 8);
         ui.macroVolume = std::clamp(mod->getSavedValue<int>("macro-volume", 60), 0, 100);
 
         auto readColor = [&](char const* key, ccColor3B def) {
@@ -75,11 +75,11 @@ namespace mpr {
         mod->setSavedValue<bool>("indicators-idle", ui.indicatorsWhenIdle);
         mod->setSavedValue<bool>("buffer", ui.buffer);
         mod->setSavedValue<bool>("buffer-uses-macro", ui.bufferUsesMacro);
-        mod->setSavedValue<bool>("buffer-watermark", ui.bufferWatermark);
         mod->setSavedValue<int>("buffer-corner", static_cast<int>(ui.bufferCorner));
         mod->setSavedValue<int>("start-adjust", ui.startAdjust);
-        mod->setSavedValue<bool>("show-lane", ui.showLane);
-        mod->setSavedValue<bool>("show-dots", ui.showDots);
+        mod->setSavedValue<int>("indicator-type", static_cast<int>(ui.indicatorType));
+        mod->setSavedValue<int>("dot-size", ui.dotSize);
+        mod->setSavedValue<int>("line-width", ui.lineWidth);
         mod->setSavedValue<int>("macro-volume", ui.macroVolume);
         auto packColor = [](ccColor3B c) { return (c.r << 16) | (c.g << 8) | c.b; };
         mod->setSavedValue<int>("press-color", packColor(ui.pressColor));

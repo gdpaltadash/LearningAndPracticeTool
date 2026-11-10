@@ -6,12 +6,9 @@ using namespace geode::prelude;
 
 namespace {
     // toggle tags
-    enum {
-        TogLane = 0, TogDots = 1, TogHold = 2, TogIdle = 3,
-        TogUsesMacro = 4, TogWatermark = 5,
-    };
+    enum { TogHold = 2, TogIdle = 3, TogUsesMacro = 4 };
     // stepper tags (value label index)
-    enum { StepOpacity = 0, StepHoldOpacity = 1, StepWindow = 2 };
+    enum { StepOpacity = 0, StepHoldOpacity = 1, StepWindow = 2, StepDotSize = 3, StepLineWidth = 4 };
     enum { ColPress = 0, ColRelease = 1, ColHold = 2 };
 
     ccColor3B& colorRef(int tag) {
@@ -24,7 +21,8 @@ namespace {
     }
 
     constexpr float kW = 340.f;
-    constexpr float kH = 262.f;
+    constexpr float kHIndicators = 292.f;
+    constexpr float kHBuffer = 236.f;
 }
 
 SettingsPopup* SettingsPopup::create(Kind kind) {
@@ -38,7 +36,7 @@ SettingsPopup* SettingsPopup::create(Kind kind) {
 }
 
 bool SettingsPopup::init(Kind kind) {
-    if (!Popup::init(kW, kH, "square01_001.png")) return false;
+    if (!Popup::init(kW, kind == Kind::Indicators ? kHIndicators : kHBuffer, "square01_001.png")) return false;
     m_kind = kind;
 
     auto title = CCLabelBMFont::create(
@@ -58,28 +56,37 @@ bool SettingsPopup::init(Kind kind) {
 
 void SettingsPopup::buildIndicators() {
     auto& ui = mpr::Session::get().ui;
-    this->addToggle(TogLane, "Click lane (bottom of the screen)", 58.f, ui.showLane);
-    this->addToggle(TogDots, "Dots inside the level", 80.f, ui.showDots);
-    this->addToggle(TogHold, "Hold line (press to release)", 102.f, ui.holdLine);
-    this->addToggle(TogIdle, "Also show with no mode active", 124.f, ui.indicatorsWhenIdle);
+    // indicator type: Lane = scrolling lane on screen, Dot = a dot in the level where the input happens
+    char const* typeNames[3] = {"Lane", "Dot", "Both"};
+    for (int i = 0; i < 3; ++i) {
+        auto spr = ButtonSprite::create(typeNames[i], 74, true, "goldFont.fnt", "GJ_button_04.png", 24.f, 0.6f);
+        m_types[i] = spr;
+        auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(SettingsPopup::onType));
+        btn->setTag(i);
+        m_buttonMenu->addChildAtPosition(btn, Anchor::TopLeft, ccp(80.f + 90.f * i, -58.f));
+    }
 
-    this->addStepper(StepOpacity, "Indicator opacity", 154.f);
-    this->addStepper(StepHoldOpacity, "Hold line opacity", 176.f);
+    this->addToggle(TogHold, "Hold line (press to release)", 92.f, ui.holdLine);
+    this->addToggle(TogIdle, "Also show with no mode active", 114.f, ui.indicatorsWhenIdle);
 
-    this->addColorButton(ColPress, "Press", 70.f, 214.f);
-    this->addColorButton(ColRelease, "Release", 170.f, 214.f);
-    this->addColorButton(ColHold, "Hold line", 270.f, 214.f);
+    this->addStepper(StepOpacity, "Indicator opacity", 142.f);
+    this->addStepper(StepHoldOpacity, "Hold line opacity", 164.f);
+    this->addStepper(StepDotSize, "Dot size (in level)", 186.f);
+    this->addStepper(StepLineWidth, "Hold line width (in level)", 208.f);
+
+    this->addColorButton(ColPress, "Press", 70.f, 244.f);
+    this->addColorButton(ColRelease, "Release", 170.f, 244.f);
+    this->addColorButton(ColHold, "Hold line", 270.f, 244.f);
 }
 
 void SettingsPopup::buildBuffer() {
     auto& s = mpr::Session::get();
     this->addStepper(StepWindow, "Buffer window (frames)", 58.f);
     this->addToggle(TogUsesMacro, "Aim at the loaded macro", 84.f, s.ui.bufferUsesMacro);
-    this->addToggle(TogWatermark, "Watermark on the end screen", 106.f, s.ui.bufferWatermark);
 
-    auto cornerLabel = CCLabelBMFont::create("Watermark corner", "chatFont.fnt");
+    auto cornerLabel = CCLabelBMFont::create("End screen watermark corner", "chatFont.fnt");
     cornerLabel->setScale(0.62f);
-    m_mainLayer->addChildAtPosition(cornerLabel, Anchor::TopLeft, ccp(26.f, -134.f), ccp(0.f, 0.5f));
+    m_mainLayer->addChildAtPosition(cornerLabel, Anchor::TopLeft, ccp(26.f, -114.f), ccp(0.f, 0.5f));
 
     // one corner at a time
     char const* names[4] = {"Top left", "Top right", "Bottom left", "Bottom right"};
@@ -89,7 +96,7 @@ void SettingsPopup::buildBuffer() {
         auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(SettingsPopup::onCorner));
         btn->setTag(i);
         float x = 100.f + (i % 2) * 124.f;
-        float y = 158.f + (i / 2) * 26.f;
+        float y = 138.f + (i / 2) * 26.f;
         m_buttonMenu->addChildAtPosition(btn, Anchor::TopLeft, ccp(x + 12.f, -y));
     }
 
@@ -175,6 +182,13 @@ void SettingsPopup::refresh() {
     if (m_values[StepOpacity]) m_values[StepOpacity]->setString(fmt::format("{}%", s.ui.indicatorOpacity).c_str());
     if (m_values[StepHoldOpacity]) m_values[StepHoldOpacity]->setString(fmt::format("{}%", s.ui.holdOpacity).c_str());
     if (m_values[StepWindow]) m_values[StepWindow]->setString(fmt::format("{}f", s.engine.config().maxEarly).c_str());
+    if (m_values[StepDotSize]) m_values[StepDotSize]->setString(fmt::format("{}", s.ui.dotSize).c_str());
+    if (m_values[StepLineWidth]) m_values[StepLineWidth]->setString(fmt::format("{}", s.ui.lineWidth).c_str());
+    for (int i = 0; i < 3; ++i) {
+        if (!m_types[i]) continue;
+        bool sel = static_cast<int>(s.ui.indicatorType) == i;
+        m_types[i]->updateBGImage(sel ? "GJ_button_01.png" : "GJ_button_04.png");
+    }
     for (int i = 0; i < 4; ++i) {
         if (!m_corners[i]) continue;
         bool sel = static_cast<int>(s.ui.bufferCorner) == i;
@@ -189,12 +203,9 @@ void SettingsPopup::onToggle(CCObject* sender) {
     auto* t = static_cast<CCMenuItemToggler*>(sender);
     bool value = !t->isToggled(); // flips after the callback
     switch (t->getTag()) {
-        case TogLane: s.ui.showLane = value; break;
-        case TogDots: s.ui.showDots = value; break;
         case TogHold: s.ui.holdLine = value; break;
         case TogIdle: s.ui.indicatorsWhenIdle = value; break;
         case TogUsesMacro: s.ui.bufferUsesMacro = value; break;
-        case TogWatermark: s.ui.bufferWatermark = value; break;
     }
     s.settingsChanged();
 }
@@ -206,6 +217,8 @@ void SettingsPopup::onStep(CCObject* sender) {
     switch (tag / 2) {
         case StepOpacity: s.ui.indicatorOpacity = std::clamp(s.ui.indicatorOpacity + dir * 5, 5, 100); break;
         case StepHoldOpacity: s.ui.holdOpacity = std::clamp(s.ui.holdOpacity + dir * 5, 5, 100); break;
+        case StepDotSize: s.ui.dotSize = std::clamp(s.ui.dotSize + dir, 2, 14); break;
+        case StepLineWidth: s.ui.lineWidth = std::clamp(s.ui.lineWidth + dir, 1, 8); break;
         case StepWindow: {
             auto cfg = s.engine.config();
             cfg.maxEarly = std::clamp(cfg.maxEarly + dir, 1, 60);
@@ -213,6 +226,13 @@ void SettingsPopup::onStep(CCObject* sender) {
             break;
         }
     }
+    s.saveSettings();
+    this->refresh();
+}
+
+void SettingsPopup::onType(CCObject* sender) {
+    auto& s = mpr::Session::get();
+    s.ui.indicatorType = static_cast<mpr::IndicatorType>(std::clamp(static_cast<CCNode*>(sender)->getTag(), 0, 2));
     s.saveSettings();
     this->refresh();
 }

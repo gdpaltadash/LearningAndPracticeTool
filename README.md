@@ -21,14 +21,17 @@ Pausa el nivel y pulsa el botón del mod (abajo a la derecha). La ventana tiene:
 - **Enable Mod** (arriba a la derecha): interruptor general. Apagado, el mod no hace nada.
 - **Load / Unload**: importa o quita la macro (se detecta el formato solo). Se recuerda por nivel.
 - **Practice Mode**: **Watch** (la macro juega con click sounds, tus inputs se ignoran) y **Trace** (la macro juega y tus clicks solo se miden: precisión en vivo y reporte). Pulsar el modo ya elegido lo apaga. Al elegir un modo, el panel **Settings** de la derecha muestra solo sus ajustes: `Scoring window` (Trace), `Macro frame offset`, `Game TPS`, `Click volume` (0 = sin sonido), `StartPos adjust` y el **Click pack** (una carpeta de sonidos para todas las macros; los releases son archivos/carpetas con `release` en el nombre).
-- **Click Indicators** (switch + engrane): círculos de press y release (mismo tamaño, distinto color) en un carril abajo y como puntos dentro del nivel. El engrane abre: carril / puntos / hold line on-off, `Also show with no mode active` (los muestra con la macro cargada aunque no estés en Watch/Trace, para ver dónde clickear), opacidad, color de press, release y hold line, y opacidad de la hold line. La **hold line** une el press con su release para ver cuánto hay que mantener.
+- **Click Indicators** (switch + engrane): dos tipos, elegibles en el engrane (`Lane` / `Dot` / `Both`).
+  - **Lane**: carril abajo en pantalla con un círculo por press y otro por release (mismo tamaño, distinto color).
+  - **Dot**: un punto dentro del nivel, en el lugar exacto donde ocurre cada input (press o release), con `Dot size`. La **hold line** (opcional) une el punto de press con el de release en el nivel, con color, opacidad y grosor (`Hold line width`) configurables; en el carril también se dibuja entre los círculos.
+  - Además: `Also show with no mode active` (los muestra con la macro cargada aunque no estés en Watch/Trace, para ver dónde clickear), opacidad y colores de press, release y hold line.
 - **Predictive Buffer** (switch + engrane): sirve **con y sin macro**.
   - Con macro cargada (y `Aim at the loaded macro` activo): lo que clickeas antes de tiempo (hasta `Buffer window` frames) se retrasa al frame exacto de la macro; lo tardío se deja igual. Te dice cuánto te adelantaste.
   - Sin macro: un click que das cuando todavía no puedes actuar (cubo en el aire, sin orbe) se retiene hasta que puedas, hasta `Buffer window` frames, y conserva la duración del hold.
-  - El engrane también elige en qué esquina sale su marca de agua en la pantalla final (una sola a la vez).
+  - El engrane también elige en qué esquina sale su marca de agua en la pantalla final (una sola a la vez; la marca no se puede apagar).
 - **Restart Level** y **Last Results**.
 
-**Pantalla final**: sale la real, con la marca **"Practice tool used"** arriba a la izquierda (y debajo el modo / precisión de Trace) y, si el buffer está activo, la marca **Predictive Input Buffer** en la esquina que elijas.
+**Pantalla final**: sale la real, con la marca **"Practice tool used"** arriba a la izquierda (y debajo el modo / precisión de Trace) y, si el buffer está activo, la marca **Predictive Input Buffer** en la esquina que elijas. Las marcas de agua no se pueden desactivar.
 
 **Stats**: mientras un modo o el buffer estén activos no se guarda nada (progreso, attempts, stats, completions, logros). Los indicadores solos no bloquean nada.
 

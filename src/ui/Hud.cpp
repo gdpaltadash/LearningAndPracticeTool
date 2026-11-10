@@ -150,7 +150,7 @@ void MacroHud::update(float dt) {
 
     bool show = pl && s.indicatorsVisible();
     this->setVisible(show);
-    if (m_world) m_world->setVisible(show && s.ui.showDots);
+    if (m_world) m_world->setVisible(show && s.ui.dots());
     if (!show) return;
 
     // flash fade-out
@@ -170,7 +170,7 @@ void MacroHud::update(float dt) {
     double now = pl->m_gameState.m_levelTime * s.tickRate() + static_cast<double>(engine.shift());
 
     m_lane->clear();
-    if (s.ui.showLane) {
+    if (s.ui.lane()) {
         m_lane->setVisible(true);
         drawLane(engine, now);
     }
@@ -178,7 +178,7 @@ void MacroHud::update(float dt) {
         m_lane->setVisible(false);
     }
 
-    if (m_world && s.ui.showDots) {
+    if (m_world && s.ui.dots()) {
         drawWorld(engine, pl->m_player1 ? pl->m_player1->getPosition() : ccp(0, 0), now);
     }
 }
@@ -284,7 +284,7 @@ void MacroHud::drawWorld(mpr::Engine const& engine, CCPoint playerPos, double no
             auto b = where(inputs[pr.up]);
             if (!a || !b) continue;
             if (!visible(*a) && !visible(*b)) continue;
-            m_world->drawSegment(*a, *b, 2.f, lineColor);
+            m_world->drawSegment(*a, *b, static_cast<float>(s.ui.lineWidth), lineColor);
         }
     }
 
@@ -295,7 +295,7 @@ void MacroHud::drawWorld(mpr::Engine const& engine, CCPoint playerPos, double no
 
         bool done = e.matched || e.injected || static_cast<double>(e.frame) <= nowFrame;
         float alpha = baseA * (done ? 0.4f : 1.f);
-        m_world->drawDot(*p, 6.f, fromRgb(e.down ? s.ui.pressColor : s.ui.releaseColor, alpha));
+        m_world->drawDot(*p, static_cast<float>(s.ui.dotSize), fromRgb(e.down ? s.ui.pressColor : s.ui.releaseColor, alpha));
     }
 }
 

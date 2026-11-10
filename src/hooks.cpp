@@ -207,7 +207,7 @@ class $modify(MPEndLevelLayer, EndLevelLayer) {
         }
 
         // -- Predictive Input Buffer watermark, one corner at a time --
-        if (s.ui.enabled && s.ui.buffer && s.ui.bufferWatermark) {
+        if (s.ui.enabled && s.ui.buffer) { // watermarks cannot be turned off
             auto text = fmt::format("Predictive Input Buffer ({}f)", s.engine.config().maxEarly);
             auto mark = CCLabelBMFont::create(text.c_str(), "goldFont.fnt");
             mark->setScale(0.42f);

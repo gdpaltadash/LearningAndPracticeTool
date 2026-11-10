@@ -17,13 +17,21 @@ namespace mpr {
 
     enum class Corner { TopLeft = 0, TopRight = 1, BottomLeft = 2, BottomRight = 3 };
 
+    /// Which click indicator is drawn.
+    ///   Lane: the scrolling lane at the bottom of the screen (circle per press / release).
+    ///   Dot:  a dot at the spot of the level where each input happens (+ optional hold line).
+    enum class IndicatorType { Lane = 0, Dot = 1, Both = 2 };
+
     struct UiSettings {
         bool enabled = true;          // master switch of the whole mod
 
         // ---- click indicators ----
         bool indicators = true;       // feature on/off (needs a loaded macro)
-        bool showLane = true;
-        bool showDots = true;
+        IndicatorType indicatorType = IndicatorType::Both;
+        int dotSize = 6;              // radius of the in-level dot
+        int lineWidth = 2;            // width of the in-level hold line
+        bool lane() const { return indicatorType != IndicatorType::Dot; }
+        bool dots() const { return indicatorType != IndicatorType::Lane; }
         bool indicatorsWhenIdle = true; // also show them while no mode (Watch / Trace) is active
         cocos2d::ccColor3B pressColor = {80, 242, 128};
         cocos2d::ccColor3B releaseColor = {255, 115, 102};
@@ -35,7 +43,6 @@ namespace mpr {
         // ---- predictive input buffer ----
         bool buffer = false;
         bool bufferUsesMacro = true;  // with a macro loaded, aim at the macro instead of the player state
-        bool bufferWatermark = true;  // show it on the end screen
         Corner bufferCorner = Corner::TopRight;
 
         // ---- Watch / Trace ----
