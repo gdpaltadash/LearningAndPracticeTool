@@ -20,7 +20,7 @@ public:
     void update(float dt) override;
 
 private:
-    bool init();
+    bool init() override;
 
     void drawLane(mpr::Engine const& engine, double nowFrame);
     void drawWorld(mpr::Engine const& engine, cocos2d::CCPoint playerPos, double nowFrame);
