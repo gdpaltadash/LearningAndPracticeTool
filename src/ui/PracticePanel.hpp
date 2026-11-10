@@ -19,6 +19,7 @@ protected:
     cocos2d::CCLabelBMFont* m_hint = nullptr;
     cocos2d::CCLabelBMFont* m_packName = nullptr;
     std::array<ButtonSprite*, 2> m_modeSprites{};
+    std::array<ButtonSprite*, 2> m_originSprites{};
     std::array<cocos2d::CCLabelBMFont*, 6> m_values{};
 
     /// nodes of the mode-specific area, removed and rebuilt when the mode changes
@@ -29,6 +30,7 @@ protected:
     void rebuildSettings();
     void addStepper(int index, char const* name, float y);
     void addPackRow(float y);
+    void addOriginRow(float y);
 
     void onLoad(cocos2d::CCObject*);
     void onUnload(cocos2d::CCObject*);
@@ -38,6 +40,7 @@ protected:
     void onGear(cocos2d::CCObject*);
     void onClickPack(cocos2d::CCObject*);
     void onClickPackReset(cocos2d::CCObject*);
+    void onOrigin(cocos2d::CCObject*);
     void onRestart(cocos2d::CCObject*);
     void onLastResults(cocos2d::CCObject*);
 

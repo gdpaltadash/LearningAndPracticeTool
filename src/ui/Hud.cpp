@@ -102,7 +102,7 @@ void MacroHud::onUser(mpr::UserResult const& r) {
     ccColor4F color = col(1.f, 1.f, 1.f);
 
     if (r.extra) {
-        text = "No match";
+        text = r.hasNearest ? fmt::format("No match ({:+}f)", r.nearestOffset) : std::string("No match");
         color = offsetColor(0, false);
     }
     else if (r.delayed) {

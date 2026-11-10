@@ -19,6 +19,10 @@
 
 namespace mpr {
 
+    /// beginAttempt() shift meaning "the macro has not started yet" (it starts later, e.g. when the
+    /// player reaches the StartPos the macro was recorded from). Nothing is due and nothing is scored.
+    constexpr int64_t kNeverShift = -1'000'000'000;
+
     enum class Mode { Off = 0, EarlyFix = 1, Watch = 2, Trace = 3 };
 
     inline const char* modeName(Mode m) {
@@ -57,6 +61,8 @@ namespace mpr {
         int macroIdx = -1;
         int offset = 0;         // user frame - macro frame (negative = early, positive = late)
         int applyDelay = 0;     // frames the input was delayed by (Early Fix)
+        bool hasNearest = false; // extra input: an unmatched macro input of the same kind exists...
+        int64_t nearestOffset = 0; // ...this many frames away (user - macro), outside the window
         int64_t userFrame = 0;
         int button = 1;
         bool p2 = false;
@@ -151,8 +157,12 @@ namespace mpr {
         // ---- real user input --------------------------------------------
 
         UserResult onUserInput(int64_t frame, int button, bool p2, bool down) {
-            frame += m_shift;
             UserResult r;
+            if (m_shift <= kNeverShift / 2) {
+                r.swallow = (m_mode == Mode::Watch || m_mode == Mode::Trace) && active();
+                return r;
+            }
+            frame += m_shift;
             r.userFrame = frame;
             r.button = button;
             r.p2 = p2;
@@ -357,6 +367,15 @@ namespace mpr {
             if (idx < 0) {
                 r.extra = true;
                 m_extra++;
+                int64_t best = INT64_MAX;
+                for (auto const& e : m_eff) {
+                    if (e.skipped || e.matched || e.button != r.button || e.p2 != r.p2 || e.down != r.down) continue;
+                    if (std::abs(e.frame - frame) < std::abs(best)) best = e.frame - frame;
+                }
+                if (best != INT64_MAX) {
+                    r.hasNearest = true;
+                    r.nearestOffset = -best;
+                }
                 return;
             }
             auto& e = m_eff[idx];

@@ -204,6 +204,7 @@ void PracticePanel::rebuildSettings() {
     m_dynamic.clear();
     m_values.fill(nullptr);
     m_packName = nullptr;
+    m_originSprites = {};
 
     auto mode = mpr::Session::get().userMode;
     std::vector<std::pair<int, char const*>> rows;
@@ -233,10 +234,12 @@ void PracticePanel::rebuildSettings() {
         return;
     }
 
-    float y = kPanelTop + 16.f;
+    float y = kPanelTop + 14.f;
+    this->addOriginRow(y);
+    y += 19.f;
     for (auto const& [index, name] : rows) {
         this->addStepper(index, name, y);
-        y += 21.f;
+        y += 19.f;
     }
     this->addPackRow(y);
     this->refresh();
@@ -269,6 +272,42 @@ void PracticePanel::addStepper(int index, char const* name, float y) {
     rightBtn->setTag(index * 2 + 1);
     m_buttonMenu->addChildAtPosition(rightBtn, Anchor::TopLeft, ccp(ax + 62.f, -y));
     m_dynamic.push_back(rightBtn);
+}
+
+void PracticePanel::addOriginRow(float y) {
+    auto label = CCLabelBMFont::create("Macro starts at", "chatFont.fnt");
+    label->setScale(0.6f);
+    m_mainLayer->addChildAtPosition(label, Anchor::TopLeft, ccp(kPanelX + 12.f, -y), ccp(0.f, 0.5f));
+    m_dynamic.push_back(label);
+
+    char const* names[2] = {"Level start", "StartPos"};
+    for (int i = 0; i < 2; ++i) {
+        auto spr = ButtonSprite::create(names[i], 66, true, "goldFont.fnt", "GJ_button_04.png", 20.f, 0.5f);
+        auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(PracticePanel::onOrigin));
+        btn->setTag(i);
+        m_buttonMenu->addChildAtPosition(btn, Anchor::TopLeft, ccp(kPanelX + 138.f + i * 74.f, -y));
+        m_dynamic.push_back(btn);
+        m_originSprites[i] = spr;
+    }
+}
+
+void PracticePanel::onOrigin(CCObject* sender) {
+    auto& s = mpr::Session::get();
+    if (static_cast<CCNode*>(sender)->getTag() == 1) {
+        if (!s.setOriginHere()) {
+            FLAlertLayer::create(
+                "StartPos needed",
+                "Start the level from the <cy>StartPos</c> the macro was recorded from, "
+                "then open this window and press <cy>StartPos</c> again.",
+                "OK"
+            )->show();
+        }
+    }
+    else {
+        s.setOriginLevelStart();
+    }
+    this->rebuildSettings();
+    this->refresh();
 }
 
 void PracticePanel::addPackRow(float y) {
@@ -322,6 +361,11 @@ void PracticePanel::refresh() {
 
     for (size_t i = 0; i < m_values.size(); ++i) {
         if (m_values[i]) m_values[i]->setString(stepValueText(static_cast<int>(i)).c_str());
+    }
+    for (int i = 0; i < 2; ++i) {
+        if (!m_originSprites[i]) continue;
+        bool selected = (i == 1) == s.originX.has_value();
+        m_originSprites[i]->updateBGImage(selected ? "GJ_button_01.png" : "GJ_button_04.png");
     }
     if (m_packName) {
         m_packName->setString(s.clickPackName().c_str());

@@ -38,9 +38,11 @@ namespace mpr {
         bool dirty() const { return m_dirty; }
         void markClean() { m_dirty = false; }
 
-        /// First write wins; a table that keeps disagreeing with reality (another TPS, other level
-        /// version...) is thrown away and started again.
-        void record(int64_t index, float x1, float y1, float x2, float y2) {
+        /// First write wins, so a run where the player drifted off the route cannot damage what was
+        /// measured before. `authoritative` writes (the macro itself was driving the player) always
+        /// replace what is stored: that is the route the indicators have to show.
+        /// The table is never thrown away on its own.
+        void record(int64_t index, float x1, float y1, float x2, float y2, bool authoritative = false) {
             if (index < 0 || index > kMaxSteps || std::isnan(x1)) return;
             if (static_cast<size_t>(index) >= m_pts.size()) m_pts.resize(static_cast<size_t>(index) + 1);
             PathPoint& p = m_pts[static_cast<size_t>(index)];
@@ -49,18 +51,21 @@ namespace mpr {
                 m_dirty = true;
                 return;
             }
-            if (std::fabs(p.x1 - x1) > 8.f) {
-                if (++m_mismatch >= 30) {
-                    m_pts.clear();
-                    m_mismatch = 0;
-                    m_pts.resize(static_cast<size_t>(index) + 1);
-                    m_pts[static_cast<size_t>(index)] = {x1, y1, x2, y2};
-                    m_dirty = true;
-                }
+            if (authoritative && (std::fabs(p.x1 - x1) > 0.01f || std::fabs(p.y1 - y1) > 0.01f)) {
+                p = {x1, y1, x2, y2};
+                m_dirty = true;
             }
-            else {
-                m_mismatch = 0;
+        }
+
+        /// The point at `index`, or the closest known one within `radius` steps (a hole in the
+        /// table must not make an indicator vanish).
+        std::optional<PathPoint> nearest(int64_t index, int64_t radius = 24) const {
+            if (auto p = at(index)) return p;
+            for (int64_t d = 1; d <= radius; ++d) {
+                if (auto p = at(index - d)) return p;
+                if (auto p = at(index + d)) return p;
             }
+            return std::nullopt;
         }
 
         std::optional<PathPoint> at(int64_t index) const {

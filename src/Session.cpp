@@ -14,6 +14,7 @@ using namespace geode::prelude;
 
 namespace mpr {
 
+
     Session& Session::get() {
         static Session instance;
         return instance;
@@ -138,6 +139,13 @@ namespace mpr {
         }
 
         macroPath = path;
+        {
+            float saved = Mod::get()->getSavedValue<float>(
+                fmt::format("origin-{}", geode::utils::string::pathToString(path)), -1.f
+            );
+            if (saved >= 0.f) originX = saved;
+            else originX.reset();
+        }
         engine.setMacro(result.macro);
         lastResults.reset();
         completeHandled = false;
@@ -156,6 +164,8 @@ namespace mpr {
         engine.setMacro(nullptr);
         this->refreshMode();
         macroPath.clear();
+        originX.reset();
+        m_waitOrigin = false;
         lastResults.reset();
         startSync = StartSync::None;
         m_shift = 0;
@@ -273,9 +283,12 @@ namespace mpr {
         if (!inLevel || !engine.macro()) return "";
         switch (startSync) {
             case StartSync::Uncalibrated:
-                return "StartPos: play this level from the start once (any mode) so the macro can be synced.";
+                return "Play this level from the start once (any mode) so the macro can be synced.";
+            case StartSync::Waiting:
+                return "The macro starts when you reach its StartPos.";
             case StartSync::Synced:
-                return fmt::format("StartPos synced (macro frame {}).", engine.startProgress());
+                return originX ? std::string("Macro synced to its StartPos.")
+                               : fmt::format("StartPos synced (macro frame {}).", engine.startProgress());
             default:
                 return "";
         }
@@ -283,28 +296,93 @@ namespace mpr {
 
     // ------------------------------------------------------------------- hooks
 
-    void Session::syncStartPos(PlayLayer* pl) {
+    void Session::syncStartPos(PlayLayer* pl, bool atReset) {
         m_shift = 0;
+        m_waitOrigin = false;
         startSync = StartSync::None;
         int64_t progress = tickOf(pl) - 1; // what the first step after the reset will count from
+        float x = pl->m_player1 ? pl->m_player1->getPositionX()
+                                : (pl->m_startPosObject ? pl->m_startPosObject->getPositionX() : 0.f);
+        if (atReset) {
+            m_hasStartPos = pl->m_startPosObject != nullptr;
+            m_spawnX = x;
+        }
+        bool startPosLevel = pl->m_startPosObject != nullptr;
+        this->refreshOriginIdx();
 
-        if (pl->m_startPosObject && engine.macro() && !m_platformer && ui.enabled) {
-            // The macro was recorded from the start of the level, so its frames are "ahead" of the
-            // game's own step counter when starting from a StartPos. The player path (measured while
-            // the level was played from the start) says which step the StartPos x corresponds to.
-            float x = pl->m_player1 ? pl->m_player1->getPositionX() : pl->m_startPosObject->getPositionX();
-            if (auto g = path.findIndexAtX(x)) {
-                // the path is stored at 240 Hz; convert that step to the macro's tick rate.
-                // The first step after the reset sees the player at x with tick progress + 1.
-                int64_t macroTick = static_cast<int64_t>(std::llround(static_cast<double>(*g - 1) * tickRate() / 240.0)) + 1;
-                m_shift = macroTick - (progress + 1) + ui.startAdjust;
-                startSync = StartSync::Synced;
+        if (engine.macro() && !m_platformer && ui.enabled) {
+            // converts "steps between two path points" into the macro's tick rate
+            auto toMacroTicks = [&](int64_t from, int64_t to) {
+                return static_cast<int64_t>(std::llround(static_cast<double>(to - from) * tickRate() / 240.0));
+            };
+
+            if (!originX) {
+                // Macro recorded from the start of the level. Only a StartPos needs a correction:
+                // the path (measured while the level was played from the start) says which step the
+                // StartPos x corresponds to.
+                if (startPosLevel) {
+                    if (auto g = path.findIndexAtX(x)) {
+                        // the first step after the reset sees the player at x with tick progress + 1
+                        m_shift = toMacroTicks(1, *g) + 1 - (progress + 1) + ui.startAdjust;
+                        startSync = StartSync::Synced;
+                    }
+                    else {
+                        startSync = StartSync::Uncalibrated;
+                    }
+                }
             }
             else {
-                startSync = StartSync::Uncalibrated;
+                // Macro recorded from a StartPos: its frame 0 is the step where the player is at originX.
+                float ox = *originX;
+                if (std::fabs(x - ox) <= 10.f) {
+                    // started from that very StartPos
+                    m_shift = 1 - (progress + 1) + ui.startAdjust;
+                    startSync = StartSync::Synced;
+                }
+                else if (x < ox) {
+                    // starting before the origin: the macro begins when the player gets there
+                    m_waitOrigin = true;
+                    m_shift = kNeverShift;
+                    startSync = StartSync::Waiting;
+                }
+                else if (auto gNow = path.findIndexAtX(x); gNow && m_originIdx) {
+                    m_shift = toMacroTicks(*m_originIdx, *gNow) + 1 - (progress + 1) + ui.startAdjust;
+                    startSync = StartSync::Synced;
+                }
+                else {
+                    startSync = StartSync::Uncalibrated;
+                }
             }
         }
+        m_lastProgress = progress;
         engine.beginAttempt(progress, m_shift);
+    }
+
+    void Session::refreshOriginIdx() {
+        m_originIdx.reset();
+        if (originX) m_originIdx = path.findIndexAtX(*originX, 12.f);
+    }
+
+    void Session::saveOrigin() {
+        if (macroPath.empty()) return;
+        Mod::get()->setSavedValue<float>(
+            fmt::format("origin-{}", geode::utils::string::pathToString(macroPath)),
+            originX ? *originX : -1.f
+        );
+    }
+
+    bool Session::setOriginHere() {
+        if (!m_hasStartPos || !engine.macro()) return false;
+        originX = m_spawnX;
+        this->saveOrigin();
+        this->settingsChanged();
+        return true;
+    }
+
+    void Session::setOriginLevelStart() {
+        originX.reset();
+        this->saveOrigin();
+        this->settingsChanged();
     }
 
     void Session::onEnterLevel(PlayLayer* pl) {
@@ -317,7 +395,7 @@ namespace mpr {
         userMode = Mode::Off;
         this->refreshMode();
         this->loadPath(pl);
-        this->syncStartPos(pl);
+        this->syncStartPos(pl, true);
 
         auto* node = MacroHud::create();
         if (node) {
@@ -339,7 +417,7 @@ namespace mpr {
         completeHandled = false;
         reached = 0;
         buffer.reset();
-        this->syncStartPos(pl);
+        this->syncStartPos(pl, true);
         if (hud) hud->onNewAttempt();
     }
 
@@ -362,7 +440,17 @@ namespace mpr {
 
     void Session::onStep(GJBaseGameLayer* layer) {
         int64_t progress = tickOf(layer);
+        m_lastProgress = progress;
         reached = progress - 1 + engine.shift();
+
+        // macro recorded from a StartPos, level started before it: begin once the player gets there
+        if (m_waitOrigin && originX && layer->m_player1 && layer->m_player1->getPositionX() >= *originX - 1.f) {
+            m_waitOrigin = false;
+            m_shift = 1 - progress + ui.startAdjust; // this step is macro progress 1
+            startSync = StartSync::Synced;
+            engine.beginAttempt(progress - 1, m_shift);
+            reached = progress - 1 + engine.shift();
+        }
 
         // Measure the path while the level is played from its start (nothing to do with the mode).
         if (!ui.enabled || m_platformer || layer->m_startPosObject || !layer->m_player1) return;
@@ -373,7 +461,11 @@ namespace mpr {
             x2 = layer->m_player2->getPositionX();
             y2 = layer->m_player2->getPositionY();
         }
-        path.record(pathIndexOf(layer), layer->m_player1->getPositionX(), layer->m_player1->getPositionY(), x2, y2);
+        bool authoritative = engine.macroDrives() && engine.shift() > mpr::kNeverShift / 2;
+        path.record(
+            pathIndexOf(layer), layer->m_player1->getPositionX(), layer->m_player1->getPositionY(), x2, y2,
+            authoritative
+        );
 
         // do not lose a long first run if the game is closed abruptly
         if (path.dirty() && ++m_sinceSave >= 3000) this->savePath();
@@ -427,8 +519,13 @@ namespace mpr {
 
     std::optional<cocos2d::CCPoint> Session::pathPointFor(int64_t macroFrame, bool p2) const {
         // an input with frame F is applied by the processCommands call whose progress is F + 1
-        auto idx = static_cast<int64_t>(std::llround(static_cast<double>(macroFrame) * 240.0 / tickRate())) + 1;
-        auto pt = path.at(idx);
+        int64_t base = 1;
+        if (originX) {
+            if (!m_originIdx) return std::nullopt;
+            base = *m_originIdx;
+        }
+        auto idx = base + static_cast<int64_t>(std::llround(static_cast<double>(macroFrame) * 240.0 / tickRate()));
+        auto pt = path.nearest(idx);
         if (!pt) return std::nullopt;
         if (p2 && !std::isnan(pt->x2)) return cocos2d::CCPoint(pt->x2, pt->y2);
         return cocos2d::CCPoint(pt->x1, pt->y1);

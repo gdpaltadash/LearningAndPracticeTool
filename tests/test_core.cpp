@@ -462,11 +462,49 @@ static void testPathTable() {
     bytes.resize(bytes.size() - 3);
     CHECK(!u.deserialize(bytes));
     CHECK(!u.deserialize({1, 2, 3}));
-    // a table that keeps disagreeing is rebuilt
+    // a drifting run never damages the table; a macro-driven (authoritative) run replaces it
     PathTable v;
     for (int i = 0; i < 100; ++i) v.record(i, i * 2.f, 0, 0, 0);
-    for (int i = 0; i < 31; ++i) v.record(i, i * 2.f + 500.f, 0, 0, 0);
-    CHECK(v.size() <= 31);
+    for (int i = 0; i < 100; ++i) v.record(i, i * 2.f + 500.f, 0, 0, 0);
+    CHECK(v.size() == 100 && std::fabs(v.at(50)->x1 - 100.f) < 0.01f);
+    for (int i = 0; i < 100; ++i) v.record(i, i * 2.f + 500.f, 0, 0, 0, true);
+    CHECK(std::fabs(v.at(50)->x1 - 600.f) < 0.01f);
+    PathTable h;
+    h.record(10, 1.f, 2.f, 0, 0);
+    h.record(14, 5.f, 2.f, 0, 0);
+    CHECK(h.nearest(12) && h.nearest(11)->x1 == 1.f && h.nearest(13)->x1 == 5.f && !h.nearest(100));
+}
+
+static void testNeverShift() {
+    auto m = makeMacro({{0, 1, false, true}, {10, 1, false, false}});
+    Engine e;
+    e.setMacro(m);
+    e.setMode(Mode::Trace);
+    e.beginAttempt(0, kNeverShift);
+    CHECK(run(e, 1, 500).empty());
+    auto r = e.onUserInput(50, 1, false, true);
+    CHECK(r.swallow && !r.extra && e.summarize(100, false).extra == 0);
+    // the macro starts later: this step is macro progress 1
+    e.beginAttempt(299, 1 - 300);
+    auto d = run(e, 300, 320);
+    CHECK(d.size() == 2 && d[0].frame == 0 && d[1].frame == 10);
+    Engine b;
+    b.setMacro(m);
+    b.setMode(Mode::EarlyFix);
+    b.beginAttempt(0, kNeverShift);
+    CHECK(!b.onUserInput(5, 1, false, true).swallow); // buffer with a macro that has not started: pass through
+}
+
+static void testNearest() {
+    auto m = makeMacro({{100, 1, false, true}});
+    Engine e;
+    e.setMacro(m);
+    e.setMode(Mode::Trace);
+    e.beginAttempt(0);
+    auto r = e.onUserInput(130, 1, false, true);
+    CHECK(r.extra && r.hasNearest && r.nearestOffset == 30);
+    auto r2 = e.onUserInput(130, 1, true, true);
+    CHECK(r2.extra && !r2.hasNearest);
 }
 
 int main() {
@@ -488,6 +526,8 @@ int main() {
     testOtherFormats();
     testStartPosShift();
     testInputBuffer();
+    testNeverShift();
+    testNearest();
     testPathTable();
     if (g_fail == 0) std::printf("ALL TESTS PASSED\n");
     return g_fail == 0 ? 0 : 1;

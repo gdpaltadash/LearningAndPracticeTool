@@ -59,7 +59,7 @@ namespace mpr {
         bool finished = false;
     };
 
-    enum class StartSync { None, Synced, Uncalibrated };
+    enum class StartSync { None, Synced, Uncalibrated, Waiting };
 
     /// Global state of the mod. Everything runs on the main thread.
     class Session {
@@ -78,6 +78,14 @@ namespace mpr {
         bool completeHandled = false;
         int64_t reached = 0;             // last event frame of the current attempt (macro space)
         StartSync startSync = StartSync::None;
+
+        /// Where the macro was recorded from (player x). Empty = from the start of the level.
+        /// A macro recorded from a StartPos has its frame 0 at that StartPos.
+        std::optional<float> originX;
+        bool hasStartPos() const { return m_hasStartPos; }
+        /// Marks the StartPos the level was last started from as the macro's origin.
+        bool setOriginHere();
+        void setOriginLevelStart();
 
         std::optional<ResultsData> lastResults;
 
@@ -115,6 +123,9 @@ namespace mpr {
         // tick counter is derived from it instead.
         double tickRate() const { return engine.macro() ? engine.tps() : 240.0; }
         /// Tick the NEXT/CURRENT processCommands call belongs to, 1-based, in the engine's tick rate.
+        /// Frame stamped on a real input: the progress reached by the last completed step, which is the
+        /// same clock the macro inputs are dispatched with.
+        int64_t userFrame() const { return m_lastProgress; }
         int64_t tickOf(GJBaseGameLayer* layer) const;
         /// Same, in the fixed 240 Hz space the path table uses.
         static int64_t pathIndexOf(GJBaseGameLayer* layer);
@@ -154,7 +165,7 @@ namespace mpr {
         void scanClickPack();
         void rememberMacroForLevel();
         void tryAutoLoadForLevel(GJGameLevel* level);
-        void syncStartPos(PlayLayer* pl);
+        void syncStartPos(PlayLayer* pl, bool atReset = false);
         void loadPath(PlayLayer* pl);
         void savePath();
         std::filesystem::path pathFile() const;
@@ -164,6 +175,13 @@ namespace mpr {
         bool m_platformer = false;
         int64_t m_shift = 0;
         int m_sinceSave = 0;
+        float m_spawnX = 0.f;
+        int64_t m_lastProgress = 0;
+        bool m_hasStartPos = false;
+        bool m_waitOrigin = false;          // waiting for the player to reach originX
+        std::optional<int64_t> m_originIdx; // path index (240 Hz) of originX
+        void saveOrigin();
+        void refreshOriginIdx();
     };
 
 }

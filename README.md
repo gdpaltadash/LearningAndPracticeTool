@@ -37,6 +37,8 @@ Pausa el nivel y pulsa el botón del mod (abajo a la derecha). La ventana tiene:
 
 **StartPos**: las macros se graban desde el inicio del nivel, así que desde un StartPos iban desfasadas. El mod mide en segundo plano por dónde pasa el jugador mientras juegas el nivel **desde el principio** (en cualquier modo; se guarda en disco por nivel) y con esa tabla calcula a qué frame de la macro corresponde el StartPos. Mientras no haya una pasada desde el inicio, el panel avisa `StartPos: play this level from the start once`. `StartPos adjust` corrige ±1 frame si hiciera falta. "Lock delta" no hace falta: el mod cuenta pasos de física, no tiempo.
 
+**Macro grabada desde un StartPos**: en el panel de Watch/Trace hay la fila **Macro starts at** (`Level start` / `StartPos`). Si tu macro se grabó desde un StartPos, inicia el nivel desde ese mismo StartPos, abre el panel y pulsa **StartPos** (se guarda por macro). A partir de ahí el frame 0 de la macro es ese punto: si juegas desde ese StartPos sincroniza directo; si juegas desde antes, la macro espera y arranca sola cuando el jugador llega a esa posición; si juegas desde un StartPos posterior, usa la tabla de trayectoria (hace falta haber pasado por ahí una vez desde el inicio). `Level start` vuelve al comportamiento normal.
+
 Los puntos dentro del nivel y la sincronización de StartPos salen de esa misma tabla, así que no hace falta una pasada en Watch: basta con haber jugado el nivel desde el inicio (o haber llegado más lejos que el StartPos).
 
 ## Si algo no cuadra
@@ -46,6 +48,10 @@ Los puntos dentro del nivel y la sincronización de StartPos salen de esa misma 
 - **Desde un StartPos queda 1-2 frames corrida**: usa `StartPos adjust`.
 - **Macro grabada con otro TPS** (por ejemplo 360 con physics bypass): pon `Game TPS` igual al TPS al que corre tu juego. En `Auto` se asume que son iguales.
 - Si el archivo no se reconoce, el mod lo dice. En zBot y xdBot el significado del flag de player 1/2 se tomó de las fuentes de nat-converter; si P1 y P2 salen invertidos con tu macro, avísame.
+
+- **Los puntos del nivel desaparecen**: la tabla de trayectoria ya no se borra sola (antes se vaciaba si tu recorrido se desviaba de la ruta guardada). Ahora, si la macro está jugando (Watch/Trace) desde el inicio del nivel, su recorrido reemplaza al guardado, y si falta un punto se usa el más cercano.
+
+- **Trace dice "No match"**: los clicks tuyos ahora se fechan con el mismo reloj con el que la macro se reproduce (el último paso completado), no con el tiempo del nivel en el instante del click. Además el mensaje muestra cuántos frames te separa del input de la macro más cercano, p. ej. `No match (+37f)`: si ese número es siempre parecido, es un desfase constante y se corrige con `Macro frame offset`; si cambia mucho, es que clickeas lejos de la macro.
 
 ## Estructura
 
