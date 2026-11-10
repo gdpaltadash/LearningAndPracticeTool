@@ -41,7 +41,7 @@ class $modify(MPGameLayer, GJBaseGameLayer) {
 
         // same convention zBot uses to record: the event belongs to the step before currentProgress
         bool p2 = !isPlayer1 && m_levelSettings->m_twoPlayerMode && m_gameState.m_isDualMode;
-        int64_t frame = static_cast<int64_t>(m_gameState.m_currentProgress) - 1;
+        int64_t frame = session.tickOf(this) - 1;
 
         if (session.engine.active()) {
             auto result = session.engine.onUserInput(frame, button, p2, down);
@@ -68,7 +68,7 @@ class $modify(MPGameLayer, GJBaseGameLayer) {
 
         session.onStep(this);
 
-        int64_t progress = static_cast<int64_t>(m_gameState.m_currentProgress);
+        int64_t progress = session.tickOf(this);
         if (session.engine.active()) {
             session.engine.dispatchDue(progress, [&](mpr::Due const& due) {
                 g_injecting = true;

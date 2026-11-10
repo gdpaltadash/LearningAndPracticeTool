@@ -39,6 +39,7 @@ Los puntos dentro del nivel y la sincronización de StartPos salen de esa misma 
 ## Si algo no cuadra
 
 - **En Watch la macro muere o se desfasa**: prueba `Macro frame offset` en `-1` o `+1`. Cada bot cuenta el frame con una convención algo distinta; el mod usa la de zBot (`m_currentProgress - 1`).
+- **La macro iba más rápida que el juego**: `m_currentProgress` no cuenta un paso por tick (también avanza en half ticks), así que ahora el contador de ticks sale del tiempo del nivel (`m_levelTime`) por el TPS de la macro (o `Game TPS`). Si aun así notas un desfase constante, ajusta `Macro frame offset`.
 - **Desde un StartPos queda 1-2 frames corrida**: usa `StartPos adjust`.
 - **Macro grabada con otro TPS** (por ejemplo 360 con physics bypass): pon `Game TPS` igual al TPS al que corre tu juego. En `Auto` se asume que son iguales.
 - Si el archivo no se reconoce, el mod lo dice. En zBot y xdBot el significado del flag de player 1/2 se tomó de las fuentes de nat-converter; si P1 y P2 salen invertidos con tu macro, avísame.

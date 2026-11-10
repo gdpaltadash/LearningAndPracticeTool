@@ -117,7 +117,7 @@ namespace mpr {
     void Session::beginAttemptNow() {
         if (!inLevel) return;
         if (auto* pl = PlayLayer::get()) {
-            engine.beginAttempt(static_cast<int64_t>(pl->m_gameState.m_currentProgress), m_shift);
+            engine.beginAttempt(tickOf(pl) - 1, m_shift);
         }
     }
 
@@ -202,6 +202,14 @@ namespace mpr {
         return ui.indicatorsWhenIdle;
     }
 
+    int64_t Session::tickOf(GJBaseGameLayer* layer) const {
+        return static_cast<int64_t>(std::floor(layer->m_gameState.m_levelTime * tickRate() + 1e-4)) + 1;
+    }
+
+    int64_t Session::pathIndexOf(GJBaseGameLayer* layer) {
+        return static_cast<int64_t>(std::floor(layer->m_gameState.m_levelTime * 240.0 + 1e-4)) + 1;
+    }
+
     bool Session::playerReady(GJBaseGameLayer* layer, int button, bool p2) const {
         if (button != 1) return true; // platformer left / right never need a target
         PlayerObject* p = (p2 && layer->m_player2) ? layer->m_player2 : layer->m_player1;
@@ -278,7 +286,7 @@ namespace mpr {
     void Session::syncStartPos(PlayLayer* pl) {
         m_shift = 0;
         startSync = StartSync::None;
-        int64_t progress = static_cast<int64_t>(pl->m_gameState.m_currentProgress);
+        int64_t progress = tickOf(pl) - 1; // what the first step after the reset will count from
 
         if (pl->m_startPosObject && engine.macro() && !m_platformer && ui.enabled) {
             // The macro was recorded from the start of the level, so its frames are "ahead" of the
@@ -286,8 +294,10 @@ namespace mpr {
             // the level was played from the start) says which step the StartPos x corresponds to.
             float x = pl->m_player1 ? pl->m_player1->getPositionX() : pl->m_startPosObject->getPositionX();
             if (auto g = path.findIndexAtX(x)) {
-                // the first step after the reset sees the player at x with progress + 1
-                m_shift = *g - (progress + 1) + ui.startAdjust;
+                // the path is stored at 240 Hz; convert that step to the macro's tick rate.
+                // The first step after the reset sees the player at x with tick progress + 1.
+                int64_t macroTick = static_cast<int64_t>(std::llround(static_cast<double>(*g - 1) * tickRate() / 240.0)) + 1;
+                m_shift = macroTick - (progress + 1) + ui.startAdjust;
                 startSync = StartSync::Synced;
             }
             else {
@@ -351,7 +361,7 @@ namespace mpr {
     }
 
     void Session::onStep(GJBaseGameLayer* layer) {
-        int64_t progress = static_cast<int64_t>(layer->m_gameState.m_currentProgress);
+        int64_t progress = tickOf(layer);
         reached = progress - 1 + engine.shift();
 
         // Measure the path while the level is played from its start (nothing to do with the mode).
@@ -363,7 +373,7 @@ namespace mpr {
             x2 = layer->m_player2->getPositionX();
             y2 = layer->m_player2->getPositionY();
         }
-        path.record(progress, layer->m_player1->getPositionX(), layer->m_player1->getPositionY(), x2, y2);
+        path.record(pathIndexOf(layer), layer->m_player1->getPositionX(), layer->m_player1->getPositionY(), x2, y2);
 
         // do not lose a long first run if the game is closed abruptly
         if (path.dirty() && ++m_sinceSave >= 3000) this->savePath();
@@ -417,7 +427,8 @@ namespace mpr {
 
     std::optional<cocos2d::CCPoint> Session::pathPointFor(int64_t macroFrame, bool p2) const {
         // an input with frame F is applied by the processCommands call whose progress is F + 1
-        auto pt = path.at(macroFrame + 1);
+        auto idx = static_cast<int64_t>(std::llround(static_cast<double>(macroFrame) * 240.0 / tickRate())) + 1;
+        auto pt = path.at(idx);
         if (!pt) return std::nullopt;
         if (p2 && !std::isnan(pt->x2)) return cocos2d::CCPoint(pt->x2, pt->y2);
         return cocos2d::CCPoint(pt->x1, pt->y1);

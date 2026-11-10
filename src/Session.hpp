@@ -102,6 +102,16 @@ namespace mpr {
         bool locksStats() const { return inLevel && assistActive() && PlayLayer::get() != nullptr; }
         bool playerReady(GJBaseGameLayer* layer, int button, bool p2) const;
 
+        // ---- time base ----
+        // m_currentProgress is NOT one count per physics tick (processCommands also runs for half
+        // ticks, so it advances faster than the macro's frames). The level time is exact, so the
+        // tick counter is derived from it instead.
+        double tickRate() const { return engine.macro() ? engine.tps() : 240.0; }
+        /// Tick the NEXT/CURRENT processCommands call belongs to, 1-based, in the engine's tick rate.
+        int64_t tickOf(GJBaseGameLayer* layer) const;
+        /// Same, in the fixed 240 Hz space the path table uses.
+        static int64_t pathIndexOf(GJBaseGameLayer* layer);
+
         // ---- hooks ----
         void onEnterLevel(PlayLayer* pl);
         void onExitLevel();

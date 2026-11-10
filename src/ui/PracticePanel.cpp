@@ -121,23 +121,23 @@ bool PracticePanel::init(PauseLayer* pause) {
 
     auto loadSpr = ButtonSprite::create("Load", 62, true, "goldFont.fnt", "GJ_button_01.png", 26.f, 0.6f);
     auto loadBtn = CCMenuItemSpriteExtra::create(loadSpr, this, menu_selector(PracticePanel::onLoad));
-    topBtn(loadBtn, 54.f, 86.f);
+    topBtn(loadBtn, 52.f, 86.f);
 
     auto unloadSpr = ButtonSprite::create("Unload", 62, true, "goldFont.fnt", "GJ_button_06.png", 26.f, 0.55f);
     auto unloadBtn = CCMenuItemSpriteExtra::create(unloadSpr, this, menu_selector(PracticePanel::onUnload));
-    topBtn(unloadBtn, 122.f, 86.f);
+    topBtn(unloadBtn, 134.f, 86.f);
 
     m_macroName = CCLabelBMFont::create("", "bigFont.fnt");
-    top(m_macroName, 160.f, 80.f);
+    top(m_macroName, 22.f, 110.f);
 
     m_macroInfo = CCLabelBMFont::create("", "chatFont.fnt");
     m_macroInfo->setColor(ccc3(200, 200, 200));
-    top(m_macroInfo, 22.f, 106.f);
+    top(m_macroInfo, 22.f, 124.f);
 
     // ---- practice mode ---------------------------------------------------------------------
     auto modeHeading = CCLabelBMFont::create("Practice Mode", "bigFont.fnt");
     modeHeading->setScale(0.46f);
-    top(modeHeading, 20.f, 130.f);
+    top(modeHeading, 20.f, 148.f);
 
     char const* modeNames[2] = {"Watch", "Trace"};
     for (int i = 0; i < 2; ++i) {
@@ -145,7 +145,7 @@ bool PracticePanel::init(PauseLayer* pause) {
         m_modeSprites[i] = spr;
         auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(PracticePanel::onMode));
         btn->setTag(2 + i);
-        topBtn(btn, 92.f, 158.f + 36.f * i);
+        topBtn(btn, 92.f, 172.f + 34.f * i);
     }
 
     // ---- click indicators / predictive buffer: label + switch + gear, aligned -----------------
@@ -163,8 +163,8 @@ bool PracticePanel::init(PauseLayer* pause) {
         gear->setTag(tag);
         topBtn(gear, 214.f, y);
     };
-    addFeature("Click Indicators", TagIndicators, 236.f, s.ui.indicators);
-    addFeature("Predictive Buffer", TagBuffer, 262.f, s.ui.buffer);
+    addFeature("Click Indicators", TagIndicators, 244.f, s.ui.indicators);
+    addFeature("Predictive Buffer", TagBuffer, 268.f, s.ui.buffer);
 
     // ---- settings panel (right) ------------------------------------------------------------
     auto heading = CCLabelBMFont::create("Settings:", "bigFont.fnt");
@@ -277,19 +277,19 @@ void PracticePanel::addPackRow(float y) {
     m_mainLayer->addChildAtPosition(label, Anchor::TopLeft, ccp(kPanelX + 12.f, -y), ccp(0.f, 0.5f));
     m_dynamic.push_back(label);
 
-    auto selSpr = ButtonSprite::create("Select", 52, true, "goldFont.fnt", "GJ_button_02.png", 22.f, 0.5f);
+    auto selSpr = ButtonSprite::create("Select", 50, true, "goldFont.fnt", "GJ_button_02.png", 22.f, 0.5f);
     auto sel = CCMenuItemSpriteExtra::create(selSpr, this, menu_selector(PracticePanel::onClickPack));
-    m_buttonMenu->addChildAtPosition(sel, Anchor::TopLeft, ccp(kPanelX + 104.f, -y));
+    m_buttonMenu->addChildAtPosition(sel, Anchor::TopLeft, ccp(kPanelX + 112.f, -y));
     m_dynamic.push_back(sel);
 
-    auto defSpr = ButtonSprite::create("Default", 52, true, "goldFont.fnt", "GJ_button_04.png", 22.f, 0.5f);
+    auto defSpr = ButtonSprite::create("Default", 50, true, "goldFont.fnt", "GJ_button_04.png", 22.f, 0.5f);
     auto def = CCMenuItemSpriteExtra::create(defSpr, this, menu_selector(PracticePanel::onClickPackReset));
-    m_buttonMenu->addChildAtPosition(def, Anchor::TopLeft, ccp(kPanelX + 164.f, -y));
+    m_buttonMenu->addChildAtPosition(def, Anchor::TopLeft, ccp(kPanelX + 184.f, -y));
     m_dynamic.push_back(def);
 
     m_packName = CCLabelBMFont::create("", "chatFont.fnt");
     m_packName->setColor(ccc3(200, 200, 200));
-    m_mainLayer->addChildAtPosition(m_packName, Anchor::TopLeft, ccp(kPanelX + 196.f, -y), ccp(0.f, 0.5f));
+    m_mainLayer->addChildAtPosition(m_packName, Anchor::TopLeft, ccp(kPanelX + 220.f, -y), ccp(0.f, 0.5f));
     m_dynamic.push_back(m_packName);
 }
 
@@ -305,7 +305,7 @@ void PracticePanel::refresh() {
         m_macroName->setString("No macro");
         m_macroName->setColor(ccc3(180, 180, 180));
     }
-    fitWidth(m_macroName, 0.38f, 76.f);
+    fitWidth(m_macroName, 0.38f, 205.f);
 
     m_macroInfo->setString(s.macroInfoLine().c_str());
     fitWidth(m_macroInfo, 0.55f, 210.f);
@@ -325,7 +325,7 @@ void PracticePanel::refresh() {
     }
     if (m_packName) {
         m_packName->setString(s.clickPackName().c_str());
-        fitWidth(m_packName, 0.55f, kPanelX + kPanelW - 8.f - (kPanelX + 196.f));
+        fitWidth(m_packName, 0.55f, kPanelX + kPanelW - 6.f - (kPanelX + 220.f));
     }
 }
 

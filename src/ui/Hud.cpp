@@ -166,7 +166,8 @@ void MacroHud::update(float dt) {
         refreshStatus(engine, s.reached);
     }
 
-    double now = static_cast<double>(pl->m_gameState.m_currentProgress) - 1.0 + static_cast<double>(engine.shift());
+    // fractional, so the lane scrolls smoothly: tick - 1 == floor(levelTime * rate)
+    double now = pl->m_gameState.m_levelTime * s.tickRate() + static_cast<double>(engine.shift());
 
     m_lane->clear();
     if (s.ui.showLane) {
