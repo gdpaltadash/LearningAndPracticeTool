@@ -132,7 +132,7 @@ void MacroHud::refreshStatus(mpr::Engine const& engine, int64_t reached) {
             text = "WATCH";
             break;
         case mpr::Mode::EarlyFix:
-            text = fmt::format("EARLY FIX  {:.1f}%  fixed {}", sum.accuracy, sum.fixed);
+            text = fmt::format("BUFFER  fixed {}", sum.fixed);
             break;
         case mpr::Mode::Trace:
             text = fmt::format("TRACE  {:.1f}%  {}/{}", sum.accuracy, sum.matched, sum.total);
@@ -148,7 +148,7 @@ void MacroHud::update(float dt) {
     auto* pl = PlayLayer::get();
     auto const& engine = s.engine;
 
-    bool show = pl && engine.active();
+    bool show = pl && s.indicatorsVisible();
     this->setVisible(show);
     if (m_world) m_world->setVisible(show && s.ui.showDots);
     if (!show) return;
@@ -166,7 +166,7 @@ void MacroHud::update(float dt) {
         refreshStatus(engine, s.reached);
     }
 
-    double now = static_cast<double>(pl->m_gameState.m_currentProgress) - 1.0;
+    double now = static_cast<double>(pl->m_gameState.m_currentProgress) - 1.0 + static_cast<double>(engine.shift());
 
     m_lane->clear();
     if (s.ui.showLane) {
@@ -178,7 +178,7 @@ void MacroHud::update(float dt) {
     }
 
     if (m_world && s.ui.showDots) {
-        drawWorld(engine, pl->m_player1 ? pl->m_player1->getPosition() : ccp(0, 0));
+        drawWorld(engine, pl->m_player1 ? pl->m_player1->getPosition() : ccp(0, 0), now);
     }
 }
 
@@ -234,7 +234,7 @@ void MacroHud::drawLane(mpr::Engine const& engine, double nowFrame) {
     for (; it != inputs.end() && it->frame <= hi; ++it) {
         if (it->skipped) continue;
         float x = xOf(static_cast<double>(it->frame));
-        bool done = it->matched || it->injected;
+        bool done = it->matched || it->injected || static_cast<double>(it->frame) <= nowFrame;
         float alpha = baseA * (done ? 0.4f : 1.f);
         m_lane->drawDot(ccp(x, laneY(it->p2)), 4.f, fromRgb(it->down ? s.ui.pressColor : s.ui.releaseColor, alpha));
     }
@@ -257,13 +257,11 @@ void MacroHud::drawLane(mpr::Engine const& engine, double nowFrame) {
     m_lane->drawSegment(ccp(nowX, bottom - 3.f), ccp(nowX, top + 3.f), 1.4f, col(1.f, 1.f, 1.f, 0.95f));
 }
 
-void MacroHud::drawWorld(mpr::Engine const& engine, CCPoint playerPos) {
+void MacroHud::drawWorld(mpr::Engine const& engine, CCPoint playerPos, double nowFrame) {
     m_world->clear();
 
     auto& s = mpr::Session::get();
     auto const& inputs = engine.inputs();
-    auto const& pos = s.positions;
-    if (pos.size() != inputs.size()) return;
 
     constexpr float kBehind = 120.f;
     constexpr float kAhead = 1400.f;
@@ -272,32 +270,31 @@ void MacroHud::drawWorld(mpr::Engine const& engine, CCPoint playerPos) {
     auto visible = [&](CCPoint const& p) {
         return p.x >= playerPos.x - kBehind && p.x <= playerPos.x + kAhead;
     };
+    // where the player was when each input happened (measured while the level was played from the start)
+    auto where = [&](mpr::Engine::Eff const& e) { return s.pathPointFor(e.frame, e.p2); };
 
     // hold lines: from where the press happened to where the release happened
     if (s.ui.holdLine) {
         this->rebuildPairs(engine);
         auto lineColor = fromRgb(s.ui.holdColor, static_cast<float>(s.ui.holdOpacity) / 100.f);
         for (auto const& pr : m_pairs) {
-            if (!pos[pr.down] || !pos[pr.up]) continue;
             if (inputs[pr.down].skipped) continue;
-            CCPoint a = *pos[pr.down];
-            CCPoint b = *pos[pr.up];
-            if (!visible(a) && !visible(b)) continue;
-            m_world->drawSegment(a, b, 2.f, lineColor);
+            auto a = where(inputs[pr.down]);
+            auto b = where(inputs[pr.up]);
+            if (!a || !b) continue;
+            if (!visible(*a) && !visible(*b)) continue;
+            m_world->drawSegment(*a, *b, 2.f, lineColor);
         }
     }
 
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        if (!pos[i]) continue;
-        auto const& e = inputs[i];
+    for (auto const& e : inputs) {
         if (e.skipped) continue;
+        auto p = where(e);
+        if (!p || !visible(*p)) continue;
 
-        CCPoint p = *pos[i];
-        if (!visible(p)) continue;
-
-        bool done = e.matched || e.injected;
+        bool done = e.matched || e.injected || static_cast<double>(e.frame) <= nowFrame;
         float alpha = baseA * (done ? 0.4f : 1.f);
-        m_world->drawDot(p, 6.f, fromRgb(e.down ? s.ui.pressColor : s.ui.releaseColor, alpha));
+        m_world->drawDot(*p, 6.f, fromRgb(e.down ? s.ui.pressColor : s.ui.releaseColor, alpha));
     }
 }
 

@@ -16,42 +16,44 @@ Usa Geode **v5.11.2** (la última para GD 2.2081) y la librería [GDReplayFormat
 
 ## Cómo se usa
 
-Pausa el nivel y pulsa el botón del mod (abajo a la derecha).
+Pausa el nivel y pulsa el botón del mod (abajo a la derecha). La ventana tiene:
 
-- **Load Macro**: importa la macro. Se recuerda por nivel y se vuelve a cargar sola la próxima vez.
-- **Mode**
-  - **Early Fix**: juegas normal. Los clicks/releases que des *antes* (hasta `Max early frames`) se retrasan al frame exacto de la macro. Los tardíos se dejan tal cual. Te dice cuánto te adelantaste (`Fixed 3f early`).
-  - **Watch**: la macro juega el nivel con click sounds. Tus inputs se ignoran.
-  - **Trace**: la macro juega el nivel, tus clicks solo se miden. Precisión en vivo y reporte final (perfect / early / late / missed / extra, offset medio en frames y ms).
-- **Restart Level**: reinicia desde el principio con el modo ya activo (Watch y Trace lo necesitan).
-- **Last Results**: reporte del intento actual o del último terminado.
+- **Enable Mod** (arriba a la derecha): interruptor general. Apagado, el mod no hace nada.
+- **Load / Unload**: importa o quita la macro (se detecta el formato solo). Se recuerda por nivel.
+- **Practice Mode**: **Watch** (la macro juega con click sounds, tus inputs se ignoran) y **Trace** (la macro juega y tus clicks solo se miden: precisión en vivo y reporte). Pulsar el modo ya elegido lo apaga. Al elegir un modo, el panel **Settings** de la derecha muestra solo sus ajustes: `Scoring window` (Trace), `Macro frame offset`, `Game TPS`, `Click volume` (0 = sin sonido), `StartPos adjust` y el **Click pack** (una carpeta de sonidos para todas las macros; los releases son archivos/carpetas con `release` en el nombre).
+- **Click Indicators** (switch + engrane): círculos de press y release (mismo tamaño, distinto color) en un carril abajo y como puntos dentro del nivel. El engrane abre: carril / puntos / hold line on-off, `Also show with no mode active` (los muestra con la macro cargada aunque no estés en Watch/Trace, para ver dónde clickear), opacidad, color de press, release y hold line, y opacidad de la hold line. La **hold line** une el press con su release para ver cuánto hay que mantener.
+- **Predictive Buffer** (switch + engrane): sirve **con y sin macro**.
+  - Con macro cargada (y `Aim at the loaded macro` activo): lo que clickeas antes de tiempo (hasta `Buffer window` frames) se retrasa al frame exacto de la macro; lo tardío se deja igual. Te dice cuánto te adelantaste.
+  - Sin macro: un click que das cuando todavía no puedes actuar (cubo en el aire, sin orbe) se retiene hasta que puedas, hasta `Buffer window` frames, y conserva la duración del hold.
+  - El engrane también elige en qué esquina sale su marca de agua en la pantalla final (una sola a la vez).
+- **Restart Level** y **Last Results**.
 
-El panel solo muestra los ajustes del modo elegido:
-- **Early Fix**: `Max early frames`, `Scoring window`, `Macro frame offset`, `Game TPS`.
-- **Watch**: `Macro frame offset`, `Game TPS`, `Click volume`.
-- **Trace**: `Scoring window`, `Macro frame offset`, `Game TPS`, `Click volume`.
+**Pantalla final**: sale la real, con la marca **"Practice tool used"** arriba a la izquierda (y debajo el modo / precisión de Trace) y, si el buffer está activo, la marca **Predictive Input Buffer** en la esquina que elijas.
 
-**Click Pack**: elige una carpeta con sonidos (wav/mp3/ogg/flac); se usa la misma para todas las macros y se recuerda. Los sonidos de release son archivos o carpetas con `release` en el nombre. `Default` vuelve al sonido incluido. Solo suenan los clicks de la macro (Watch/Trace); tus clicks no hacen sonido. `Click volume` en 0 = sin sonido.
+**Stats**: mientras un modo o el buffer estén activos no se guarda nada (progreso, attempts, stats, completions, logros). Los indicadores solos no bloquean nada.
 
-**Indicators** (botón en el panel): carril y puntos on/off, opacidad, color de press y de release (ambos son círculos), y **hold line**: una línea del indicador de press al de release para ver cuánto hay que mantener (color y opacidad configurables). En el carril se dibuja entre los círculos; en el nivel entre las posiciones grabadas.
+**StartPos**: las macros se graban desde el inicio del nivel, así que desde un StartPos iban desfasadas. El mod mide en segundo plano por dónde pasa el jugador mientras juegas el nivel **desde el principio** (en cualquier modo; se guarda en disco por nivel) y con esa tabla calcula a qué frame de la macro corresponde el StartPos. Mientras no haya una pasada desde el inicio, el panel avisa `StartPos: play this level from the start once`. `StartPos adjust` corrige ±1 frame si hiciera falta. "Lock delta" no hace falta: el mod cuenta pasos de física, no tiempo.
 
-**Stats**: con cualquier modo activo no se guarda nada (progreso, attempts, stats, completions). Al llegar al final del nivel sale el reporte y el juego se pausa.
+Los puntos dentro del nivel y la sincronización de StartPos salen de esa misma tabla, así que no hace falta una pasada en Watch: basta con haber jugado el nivel desde el inicio (o haber llegado más lejos que el StartPos).
 
 ## Si algo no cuadra
 
 - **En Watch la macro muere o se desfasa**: prueba `Macro frame offset` en `-1` o `+1`. Cada bot cuenta el frame con una convención algo distinta; el mod usa la de zBot (`m_currentProgress - 1`).
+- **Desde un StartPos queda 1-2 frames corrida**: usa `StartPos adjust`.
 - **Macro grabada con otro TPS** (por ejemplo 360 con physics bypass): pon `Game TPS` igual al TPS al que corre tu juego. En `Auto` se asume que son iguales.
 - Si el archivo no se reconoce, el mod lo dice. En zBot y xdBot el significado del flag de player 1/2 se tomó de las fuentes de nat-converter; si P1 y P2 salen invertidos con tu macro, avísame.
 
 ## Estructura
 
 ```
-src/core/Macro.*      lectores de macros (GDR2 + otros formatos, C++ puro)
-src/core/Engine.hpp   corrección de early inputs, emparejado y puntuación (C++ puro, probado)
-src/Session.*         estado global, ajustes, sonidos, bloqueo de stats
-src/hooks.cpp         hooks de Geode (inputs, nivel, stats, menú de pausa)
-src/ui/               HUD, panel, popup de indicadores, popup de resultados
-tests/test_core.cpp   tests de la lógica (se compilan aparte, sin Geode)
+src/core/Macro.*       lectores de macros (GDR2 + otros formatos, C++ puro)
+src/core/Engine.hpp    emparejado, buffer con macro, puntuación, shift de StartPos (C++ puro, probado)
+src/core/Buffer.hpp    predictive buffer sin macro (C++ puro, probado)
+src/core/PathTable.hpp trayectoria del jugador por paso de física (C++ puro, probado)
+src/Session.*          estado global, ajustes, sonidos, bloqueo de stats
+src/hooks.cpp          hooks de Geode (inputs, nivel, stats, pantalla final, menú de pausa)
+src/ui/                HUD, ventana principal, popup de ajustes (engranes), popup de resultados
+tests/test_core.cpp    tests de la lógica (se compilan aparte, sin Geode)
 ```
 
 Tests de la lógica (necesitan g++ 13+ y los headers de GDReplayFormat):

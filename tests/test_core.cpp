@@ -2,6 +2,8 @@
 //   g++ -std=c++23 -Isrc/core -I<GDReplayFormat>/include tests/test_core.cpp src/core/Macro.cpp -o test_core && ./test_core
 #include "Engine.hpp"
 #include "Macro.hpp"
+#include "Buffer.hpp"
+#include "PathTable.hpp"
 
 #include <gdr/gdr.hpp>
 
@@ -353,6 +355,120 @@ static void testOtherFormats() {
     CHECK(!loadMacro(bytes("{\"foo\":1}"), "x.json").ok());
 }
 
+static void testStartPosShift() {
+    // macro recorded from the level start; the game starts at a StartPos that is macro progress 1000
+    auto m = makeMacro({{1100, 1, false, true}, {1110, 1, false, false}});
+    Engine e;
+    e.setMacro(m);
+    e.setMode(Mode::Watch);
+    e.beginAttempt(1, 999); // game progress 1 == macro progress 1000
+    CHECK(e.shift() == 999);
+    auto d = run(e, 1, 90);
+    CHECK(d.empty());          // macro frame 1100 is game progress ~101
+    d = run(e, 91, 110);
+    CHECK(d.size() == 1 && d[0].frame == 1100 && d[0].down);
+    // Trace: the user clicks at game frame 100 -> macro frame 1099 -> 1 early
+    Engine t;
+    t.setMacro(m);
+    t.setMode(Mode::Trace);
+    t.beginAttempt(1, 999);
+    auto r = t.onUserInput(100, 1, false, true);
+    CHECK(r.matched && r.offset == -1 && r.userFrame == 1100 - 1);
+    // inputs before the StartPos are skipped, not injected
+    Engine w;
+    w.setMacro(makeMacro({{50, 1, false, true}, {60, 1, false, false}, {1100, 1, false, true}}));
+    w.setMode(Mode::Watch);
+    w.beginAttempt(1, 999);
+    auto dd = run(w, 1, 300);
+    CHECK(dd.size() == 1 && dd[0].frame == 1100);
+    // config changes keep the shift
+    Config c = w.config();
+    c.frameOffset = 1;
+    w.setConfig(c);
+    CHECK(w.shift() == 999);
+}
+
+static void testInputBuffer() {
+    InputBuffer b;
+    b.setWindow(6);
+    std::vector<InputBuffer::Out> out;
+    auto emit = [&](InputBuffer::Out const& o) { out.push_back(o); };
+    bool ready = false;
+    auto rdy = [&](int, bool) { return ready; };
+
+    // ready right now: not taken over
+    CHECK(!b.onInput(10, 1, false, true, true));
+    // not ready: held
+    InputBuffer c;
+    c.setWindow(6);
+    CHECK(c.onInput(10, 1, false, true, false));   // press at frame 10, can't act
+    CHECK(c.onInput(13, 1, false, false, false));  // release 3 frames later, still queued
+    out.clear();
+    ready = false;
+    for (int p = 11; p <= 13; ++p) c.step(p, rdy, emit);
+    CHECK(out.empty());
+    ready = true;
+    c.step(14, rdy, emit);                         // now = 13: lands -> press applied, shift = 3
+    CHECK(out.size() == 1 && out[0].down);
+    for (int p = 15; p <= 16; ++p) c.step(p, rdy, emit);
+    CHECK(out.size() == 1);                        // release must keep the 3 frame hold
+    c.step(17, rdy, emit);                         // now = 16 = 13 + 3
+    CHECK(out.size() == 2 && !out[1].down);
+    CHECK(!c.anyWaiting());
+    // after draining, a release goes straight through
+    CHECK(!c.onInput(40, 1, false, false, false));
+
+    // window expires: the press is applied anyway
+    InputBuffer d;
+    d.setWindow(4);
+    out.clear();
+    ready = false;
+    d.onInput(100, 1, false, true, false);
+    for (int p = 101; p <= 104; ++p) d.step(p, rdy, emit);
+    CHECK(out.empty());
+    d.step(105, rdy, emit);                        // now = 104 >= 100 + 4
+    CHECK(out.size() == 1 && out[0].down);
+
+    // keys are independent and order on one key is kept
+    InputBuffer e;
+    out.clear();
+    e.onInput(10, 1, false, true, false);
+    CHECK(!e.onInput(11, 2, false, true, true));   // other button: free
+    CHECK(e.onInput(12, 1, false, false, false));
+    CHECK(e.onInput(14, 1, false, true, true));    // second tap queued behind the first
+    ready = true;
+    for (int p = 11; p <= 30; ++p) e.step(p, rdy, emit);
+    CHECK(out.size() == 3 && out[0].down && !out[1].down && out[2].down);
+}
+
+static void testPathTable() {
+    PathTable t;
+    for (int i = 0; i < 1000; ++i) t.record(i, 10.f + i * 1.3f, 100.f, std::numeric_limits<float>::quiet_NaN(), 0.f);
+    CHECK(t.size() == 1000 && t.dirty());
+    auto at = t.at(500);
+    CHECK(at && std::fabs(at->x1 - 660.f) < 0.01f);
+    CHECK(!t.at(1000) && !t.at(-1));
+    auto idx = t.findIndexAtX(10.f + 400 * 1.3f + 0.4f);
+    CHECK(idx && *idx == 400);
+    CHECK(!t.findIndexAtX(99999.f));
+    // first write wins
+    t.record(500, 5000.f, 0, 0, 0);
+    CHECK(std::fabs(t.at(500)->x1 - 660.f) < 0.01f);
+    // persistence
+    auto bytes = t.serialize();
+    PathTable u;
+    CHECK(u.deserialize(bytes) && u.size() == 1000 && !u.dirty());
+    CHECK(std::fabs(u.at(999)->x1 - t.at(999)->x1) < 0.001f);
+    bytes.resize(bytes.size() - 3);
+    CHECK(!u.deserialize(bytes));
+    CHECK(!u.deserialize({1, 2, 3}));
+    // a table that keeps disagreeing is rebuilt
+    PathTable v;
+    for (int i = 0; i < 100; ++i) v.record(i, i * 2.f, 0, 0, 0);
+    for (int i = 0; i < 31; ++i) v.record(i, i * 2.f + 500.f, 0, 0, 0);
+    CHECK(v.size() <= 31);
+}
+
 int main() {
     testFixerDelaysEarlyClick();
     testFixerLateAndTooEarlyAreNotFixed();
@@ -370,6 +486,9 @@ int main() {
     testLoadGdr2Platformer();
     testLoadRejectsGarbage();
     testOtherFormats();
+    testStartPosShift();
+    testInputBuffer();
+    testPathTable();
     if (g_fail == 0) std::printf("ALL TESTS PASSED\n");
     return g_fail == 0 ? 0 : 1;
 }

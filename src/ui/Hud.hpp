@@ -23,7 +23,7 @@ private:
     bool init();
 
     void drawLane(mpr::Engine const& engine, double nowFrame);
-    void drawWorld(mpr::Engine const& engine, cocos2d::CCPoint playerPos);
+    void drawWorld(mpr::Engine const& engine, cocos2d::CCPoint playerPos, double nowFrame);
     void refreshStatus(mpr::Engine const& engine, int64_t reached);
 
     cocos2d::CCDrawNode* m_lane = nullptr;

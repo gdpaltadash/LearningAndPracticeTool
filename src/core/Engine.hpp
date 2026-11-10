@@ -122,7 +122,14 @@ namespace mpr {
 
         /// Call whenever the level (re)starts or a checkpoint is respawned.
         /// `progress` is m_currentProgress right after the reset.
-        void beginAttempt(int64_t progress) {
+        ///
+        /// `shift` converts game progress into macro space (macro progress = progress + shift).
+        /// It is non-zero when the level is started from a StartPos: the macro was recorded from
+        /// the beginning of the level, so its frames are ahead of the game's own counter.
+        void beginAttempt(int64_t progress, int64_t shift = 0) {
+            m_rawProgress = progress;
+            m_shift = shift;
+            progress += shift;
             m_startProgress = progress;
             for (auto& e : m_eff) {
                 e.matched = false;
@@ -144,6 +151,7 @@ namespace mpr {
         // ---- real user input --------------------------------------------
 
         UserResult onUserInput(int64_t frame, int button, bool p2, bool down) {
+            frame += m_shift;
             UserResult r;
             r.userFrame = frame;
             r.button = button;
@@ -210,6 +218,7 @@ namespace mpr {
         template <class F>
         void dispatchDue(int64_t progress, F&& fn) {
             if (!active()) return;
+            progress += m_shift;
 
             if (macroDrives()) {
                 while (m_next < m_eff.size() && m_eff[m_next].frame < progress) {
@@ -288,6 +297,7 @@ namespace mpr {
         std::vector<Eff> const& inputs() const { return m_eff; }
         std::vector<UserResult> const& events() const { return m_events; }
         int64_t startProgress() const { return m_startProgress; }
+        int64_t shift() const { return m_shift; }
 
         /// Effective ticks per second used for time conversions.
         double tps() const {
@@ -319,7 +329,7 @@ namespace mpr {
             std::stable_sort(m_eff.begin(), m_eff.end(), [](Eff const& a, Eff const& b) {
                 return a.frame < b.frame;
             });
-            beginAttempt(m_startProgress);
+            beginAttempt(m_rawProgress, m_shift);
         }
 
         /// Nearest unmatched macro input of the same kind within [frame - lateWin, frame + earlyWin].
@@ -380,7 +390,9 @@ namespace mpr {
         std::deque<Due> m_pending;
         std::vector<UserResult> m_events;
         int m_extra = 0;
-        int64_t m_startProgress = 0;
+        int64_t m_startProgress = 0; // in macro space
+        int64_t m_rawProgress = 0;   // game progress at the start of the attempt
+        int64_t m_shift = 0;
     };
 
 }

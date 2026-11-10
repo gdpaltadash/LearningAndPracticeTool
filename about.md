@@ -1,13 +1,13 @@
 # PaltaDash's Practice Tool
 
-Learn a level from a macro. Import a **GDR2** macro (zBot and other GDR bots) from the pause menu and pick a mode:
+Learn a level from a macro. Load a macro (GDR2, MegaHack, zBot, xdBot, TASBot, Echo, plain text) from the pause menu.
 
-- **Early Fix** - play normally. Inputs you press *early* (up to the frame limit you choose) are delayed to the exact frame the macro pressed/released. Late inputs are left alone. The HUD tells you how early each click was.
 - **Watch** - the macro plays the level with click sounds so you can learn the click pattern. Inputs are ignored.
-- **Trace** - the macro plays the level and *your* clicks are only measured. You get a live accuracy readout and a full report (perfect / early / late / missed, average offset in frames and ms).
+- **Trace** - the macro plays the level and *your* clicks are only measured: live accuracy plus a full report.
+- **Click Indicators** - press / release circles (two colors, configurable opacity) on a lane and inside the level, with an optional hold line showing how long to hold. They also work with a macro loaded but no mode active, to show you where to click.
+- **Predictive Buffer** - works with or without a macro. Early clicks are delayed to the exact macro frame, or (without a macro) held until you can actually act.
+- **StartPos support** - macros stay in sync when you start from a StartPos.
 
-Click dots are shown on a scrolling lane at the bottom of the screen and inside the level itself.
+The end screen shows a **Practice tool used** watermark (and a Predictive Input Buffer watermark in the corner you choose).
 
-**Nothing is saved while a mode is active** - no progress, attempts, stats or completions. This is a practice tool, not for verified runs.
-
-Open it from the pause menu: the mod's button.
+**Nothing is saved while Watch / Trace / the buffer is active** - no progress, attempts, stats or completions.

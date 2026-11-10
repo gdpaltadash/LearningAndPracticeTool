@@ -1,7 +1,7 @@
 #include "PracticePanel.hpp"
 
-#include "IndicatorsPopup.hpp"
 #include "ResultsPopup.hpp"
+#include "SettingsPopup.hpp"
 
 #include <Geode/utils/async.hpp>
 #include <Geode/utils/file.hpp>
@@ -10,12 +10,23 @@ using namespace geode::prelude;
 
 namespace {
     enum Step {
-        StepMaxEarly = 0,
         StepWindow = 1,
         StepOffset = 2,
         StepTps = 3,
         StepVolume = 4,
+        StepStartAdjust = 5,
     };
+
+    enum Tag { TagEnable = 1, TagIndicators = 2, TagBuffer = 3 };
+
+    constexpr float kPopupW = 540.f;
+    constexpr float kPopupH = 290.f;
+
+    // dark settings panel (right side)
+    constexpr float kPanelX = 244.f;
+    constexpr float kPanelTop = 86.f;     // distance from the top of the popup
+    constexpr float kPanelW = 284.f;
+    constexpr float kPanelH = 160.f;
 
     constexpr std::array<int, 9> kTpsValues = {0, 60, 120, 180, 240, 360, 480, 720, 960};
 
@@ -30,22 +41,35 @@ namespace {
         auto const& s = mpr::Session::get();
         auto const& c = s.engine.config();
         switch (index) {
-            case StepMaxEarly: return fmt::format("{}f", c.maxEarly);
             case StepWindow: return fmt::format("{}f", c.window);
             case StepOffset: return fmt::format("{:+}f", c.frameOffset);
             case StepTps: return c.gameTps <= 0.0 ? std::string("Auto") : fmt::format("{:.0f}", c.gameTps);
             case StepVolume: return s.ui.macroVolume <= 0 ? std::string("Off") : fmt::format("{}%", s.ui.macroVolume);
+            case StepStartAdjust: return fmt::format("{:+}f", s.ui.startAdjust);
         }
         return "";
     }
 
     mpr::Mode modeFromTag(int tag) {
         switch (tag) {
-            case 1: return mpr::Mode::EarlyFix;
             case 2: return mpr::Mode::Watch;
             case 3: return mpr::Mode::Trace;
             default: return mpr::Mode::Off;
         }
+    }
+
+    /// Shrinks a label until it fits `maxWidth`.
+    void fitWidth(CCLabelBMFont* label, float baseScale, float maxWidth) {
+        label->setScale(baseScale);
+        float w = label->getContentSize().width * baseScale;
+        if (w > maxWidth && w > 0.f) label->setScale(baseScale * maxWidth / w);
+    }
+
+    CCNode* gearSprite() {
+        CCNode* spr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn02_001.png");
+        if (!spr) spr = ButtonSprite::create("Set", 26, true, "goldFont.fnt", "GJ_button_04.png", 22.f, 0.5f);
+        else spr->setScale(0.62f);
+        return spr;
     }
 }
 
@@ -60,71 +84,115 @@ PracticePanel* PracticePanel::create(PauseLayer* pause) {
 }
 
 bool PracticePanel::init(PauseLayer* pause) {
-    if (!Popup::init(360.f, 276.f, "square01_001.png")) return false;
+    if (!Popup::init(kPopupW, kPopupH, "square01_001.png")) return false;
     m_pause = pause;
-    this->setTitle("PaltaDash's Practice Tool");
 
-    // ---- macro info + load / unload -------------------------------------------------
-    m_macroName = CCLabelBMFont::create("", "bigFont.fnt");
-    m_mainLayer->addChildAtPosition(m_macroName, Anchor::TopLeft, ccp(18.f, -42.f), ccp(0.f, 0.5f));
+    auto& s = mpr::Session::get();
+    auto top = [&](CCNode* n, float x, float y, CCPoint anchor = ccp(0.f, 0.5f)) {
+        m_mainLayer->addChildAtPosition(n, Anchor::TopLeft, ccp(x, -y), anchor);
+    };
+    auto topBtn = [&](CCNode* n, float x, float y) {
+        m_buttonMenu->addChildAtPosition(n, Anchor::TopLeft, ccp(x, -y));
+    };
 
-    m_macroInfo = CCLabelBMFont::create("", "chatFont.fnt");
-    m_macroInfo->setScale(0.55f);
-    m_macroInfo->setColor(ccc3(200, 200, 200));
-    m_mainLayer->addChildAtPosition(m_macroInfo, Anchor::TopLeft, ccp(18.f, -57.f), ccp(0.f, 0.5f));
+    // ---- header: title, logo, master switch ---------------------------------------------
+    auto title = CCLabelBMFont::create("Practice Tool", "bigFont.fnt");
+    fitWidth(title, 0.8f, 280.f);
+    top(title, 44.f, 26.f);
 
-    m_warning = CCLabelBMFont::create("", "chatFont.fnt");
-    m_warning->setScale(0.5f);
-    m_warning->setColor(ccc3(255, 190, 60));
-    m_mainLayer->addChildAtPosition(m_warning, Anchor::TopLeft, ccp(18.f, -70.f), ccp(0.f, 0.5f));
-
-    auto loadSpr = ButtonSprite::create("Load", 70, true, "goldFont.fnt", "GJ_button_01.png", 24.f, 0.6f);
-    auto loadBtn = CCMenuItemSpriteExtra::create(loadSpr, this, menu_selector(PracticePanel::onLoad));
-    m_buttonMenu->addChildAtPosition(loadBtn, Anchor::TopRight, ccp(-113.f, -48.f));
-
-    auto unloadSpr = ButtonSprite::create("Unload", 56, true, "goldFont.fnt", "GJ_button_06.png", 24.f, 0.5f);
-    auto unloadBtn = CCMenuItemSpriteExtra::create(unloadSpr, this, menu_selector(PracticePanel::onUnload));
-    m_buttonMenu->addChildAtPosition(unloadBtn, Anchor::TopRight, ccp(-46.f, -48.f));
-
-    // ---- mode selector -----------------------------------------------------------------
-    auto modeLabel = CCLabelBMFont::create("Mode", "goldFont.fnt");
-    modeLabel->setScale(0.55f);
-    m_mainLayer->addChildAtPosition(modeLabel, Anchor::TopLeft, ccp(18.f, -96.f), ccp(0.f, 0.5f));
-
-    char const* modeNames[4] = {"Off", "Early Fix", "Watch", "Trace"};
-    for (int i = 0; i < 4; ++i) {
-        auto spr = ButtonSprite::create(modeNames[i], 62, true, "goldFont.fnt", "GJ_button_04.png", 24.f, 0.55f);
-        m_modeSprites[i] = spr;
-        auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(PracticePanel::onMode));
-        btn->setTag(i);
-        m_buttonMenu->addChildAtPosition(btn, Anchor::TopLeft, ccp(96.f + 66.f * i, -96.f));
+    if (auto logo = CCSprite::create("macro-button.png"_spr)) {
+        logo->setScale(30.f / std::max(logo->getContentSize().width, 1.f));
+        top(logo, 352.f, 26.f, ccp(0.5f, 0.5f));
     }
 
-    // ---- click pack / indicators ---------------------------------------------------------
-    auto packSpr = ButtonSprite::create("Click Pack", 96, true, "goldFont.fnt", "GJ_button_02.png", 24.f, 0.55f);
-    auto packBtn = CCMenuItemSpriteExtra::create(packSpr, this, menu_selector(PracticePanel::onClickPack));
-    m_buttonMenu->addChildAtPosition(packBtn, Anchor::TopLeft, ccp(96.f, -214.f));
+    auto enableLabel = CCLabelBMFont::create("Enable Mod", "goldFont.fnt");
+    enableLabel->setScale(0.5f);
+    top(enableLabel, 490.f, 26.f, ccp(1.f, 0.5f));
 
-    auto defSpr = ButtonSprite::create("Default", 56, true, "goldFont.fnt", "GJ_button_04.png", 24.f, 0.5f);
-    auto defBtn = CCMenuItemSpriteExtra::create(defSpr, this, menu_selector(PracticePanel::onClickPackReset));
-    m_buttonMenu->addChildAtPosition(defBtn, Anchor::TopLeft, ccp(180.f, -214.f));
+    auto enable = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(PracticePanel::onToggle), 0.7f);
+    enable->setTag(TagEnable);
+    enable->toggle(s.ui.enabled);
+    topBtn(enable, 512.f, 26.f);
 
-    auto indSpr = ButtonSprite::create("Indicators", 96, true, "goldFont.fnt", "GJ_button_02.png", 24.f, 0.55f);
-    auto indBtn = CCMenuItemSpriteExtra::create(indSpr, this, menu_selector(PracticePanel::onIndicators));
-    m_buttonMenu->addChildAtPosition(indBtn, Anchor::TopLeft, ccp(264.f, -214.f));
+    // ---- macro ---------------------------------------------------------------------------
+    auto macroHeading = CCLabelBMFont::create("Load Macro", "bigFont.fnt");
+    macroHeading->setScale(0.46f);
+    top(macroHeading, 20.f, 62.f);
 
-    m_packLabel = CCLabelBMFont::create("", "chatFont.fnt");
-    m_packLabel->setColor(ccc3(200, 200, 200));
-    m_mainLayer->addChildAtPosition(m_packLabel, Anchor::TopLeft, ccp(180.f, -234.f));
+    auto loadSpr = ButtonSprite::create("Load", 62, true, "goldFont.fnt", "GJ_button_01.png", 26.f, 0.6f);
+    auto loadBtn = CCMenuItemSpriteExtra::create(loadSpr, this, menu_selector(PracticePanel::onLoad));
+    topBtn(loadBtn, 54.f, 86.f);
+
+    auto unloadSpr = ButtonSprite::create("Unload", 62, true, "goldFont.fnt", "GJ_button_06.png", 26.f, 0.55f);
+    auto unloadBtn = CCMenuItemSpriteExtra::create(unloadSpr, this, menu_selector(PracticePanel::onUnload));
+    topBtn(unloadBtn, 122.f, 86.f);
+
+    m_macroName = CCLabelBMFont::create("", "bigFont.fnt");
+    top(m_macroName, 160.f, 80.f);
+
+    m_macroInfo = CCLabelBMFont::create("", "chatFont.fnt");
+    m_macroInfo->setColor(ccc3(200, 200, 200));
+    top(m_macroInfo, 22.f, 106.f);
+
+    // ---- practice mode ---------------------------------------------------------------------
+    auto modeHeading = CCLabelBMFont::create("Practice Mode", "bigFont.fnt");
+    modeHeading->setScale(0.46f);
+    top(modeHeading, 20.f, 130.f);
+
+    char const* modeNames[2] = {"Watch", "Trace"};
+    for (int i = 0; i < 2; ++i) {
+        auto spr = ButtonSprite::create(modeNames[i], 132, true, "goldFont.fnt", "GJ_button_04.png", 30.f, 0.7f);
+        m_modeSprites[i] = spr;
+        auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(PracticePanel::onMode));
+        btn->setTag(2 + i);
+        topBtn(btn, 92.f, 158.f + 36.f * i);
+    }
+
+    // ---- click indicators / predictive buffer: label + switch + gear, aligned -----------------
+    auto addFeature = [&](char const* name, int tag, float y, bool value) {
+        auto label = CCLabelBMFont::create(name, "bigFont.fnt");
+        fitWidth(label, 0.42f, 140.f);
+        top(label, 20.f, y);
+
+        auto toggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(PracticePanel::onToggle), 0.62f);
+        toggle->setTag(tag);
+        toggle->toggle(value);
+        topBtn(toggle, 178.f, y);
+
+        auto gear = CCMenuItemSpriteExtra::create(gearSprite(), this, menu_selector(PracticePanel::onGear));
+        gear->setTag(tag);
+        topBtn(gear, 214.f, y);
+    };
+    addFeature("Click Indicators", TagIndicators, 236.f, s.ui.indicators);
+    addFeature("Predictive Buffer", TagBuffer, 262.f, s.ui.buffer);
+
+    // ---- settings panel (right) ------------------------------------------------------------
+    auto heading = CCLabelBMFont::create("Settings:", "bigFont.fnt");
+    heading->setScale(0.5f);
+    top(heading, kPanelX + kPanelW / 2.f, 64.f, ccp(0.5f, 0.5f));
+
+    auto bg = CCScale9Sprite::create("square02_001.png");
+    bg->setContentSize(ccp(kPanelW, kPanelH));
+    bg->setColor(ccc3(0, 18, 38));
+    bg->setOpacity(200);
+    m_mainLayer->addChildAtPosition(
+        bg, Anchor::TopLeft, ccp(kPanelX + kPanelW / 2.f, -(kPanelTop + kPanelH / 2.f))
+    );
+
+    m_hint = CCLabelBMFont::create("", "chatFont.fnt", kPanelW - 20.f, kCCTextAlignmentLeft);
+    m_hint->setScale(0.5f);
+    m_hint->setColor(ccc3(255, 190, 60));
+    m_hint->setAnchorPoint(ccp(0.f, 1.f));
+    top(m_hint, kPanelX + 10.f, kPanelTop + kPanelH - 8.f, ccp(0.f, 0.f));
 
     // ---- bottom buttons ------------------------------------------------------------------
-    auto restartSpr = ButtonSprite::create("Restart Level", 110, true, "goldFont.fnt", "GJ_button_01.png", 26.f, 0.6f);
+    auto restartSpr = ButtonSprite::create("Restart Level", 124, true, "goldFont.fnt", "GJ_button_01.png", 28.f, 0.6f);
     auto restartBtn = CCMenuItemSpriteExtra::create(restartSpr, this, menu_selector(PracticePanel::onRestart));
-    m_buttonMenu->addChildAtPosition(restartBtn, Anchor::Bottom, ccp(-62.f, 20.f));
+    topBtn(restartBtn, kPanelX + 72.f, 268.f);
 
-    auto resultsSpr = ButtonSprite::create("Last Results", 110, true, "goldFont.fnt", "GJ_button_02.png", 26.f, 0.6f);
+    auto resultsSpr = ButtonSprite::create("Last Results", 124, true, "goldFont.fnt", "GJ_button_02.png", 28.f, 0.6f);
     auto resultsBtn = CCMenuItemSpriteExtra::create(resultsSpr, this, menu_selector(PracticePanel::onLastResults));
-    m_buttonMenu->addChildAtPosition(resultsBtn, Anchor::Bottom, ccp(62.f, 20.f));
+    topBtn(resultsBtn, kPanelX + kPanelW - 72.f, 268.f);
 
     this->rebuildSettings();
     this->refresh();
@@ -135,68 +203,94 @@ void PracticePanel::rebuildSettings() {
     for (auto* n : m_dynamic) n->removeFromParent();
     m_dynamic.clear();
     m_values.fill(nullptr);
+    m_packName = nullptr;
 
-    auto mode = mpr::Session::get().engine.mode();
+    auto mode = mpr::Session::get().userMode;
     std::vector<std::pair<int, char const*>> rows;
     switch (mode) {
-        case mpr::Mode::EarlyFix:
-            rows = {{StepMaxEarly, "Max early frames"}, {StepWindow, "Scoring window"},
-                    {StepOffset, "Macro frame offset"}, {StepTps, "Game TPS"}};
-            break;
         case mpr::Mode::Watch:
-            rows = {{StepOffset, "Macro frame offset"}, {StepTps, "Game TPS"}, {StepVolume, "Click volume (0 = off)"}};
+            rows = {{StepOffset, "Macro frame offset"}, {StepTps, "Game TPS"},
+                    {StepVolume, "Click volume"}, {StepStartAdjust, "StartPos adjust"}};
             break;
         case mpr::Mode::Trace:
-            rows = {{StepWindow, "Scoring window"}, {StepOffset, "Macro frame offset"},
-                    {StepTps, "Game TPS"}, {StepVolume, "Click volume (0 = off)"}};
+            rows = {{StepWindow, "Scoring window"}, {StepOffset, "Macro frame offset"}, {StepTps, "Game TPS"},
+                    {StepVolume, "Click volume"}, {StepStartAdjust, "StartPos adjust"}};
             break;
         default:
             break;
     }
 
     if (rows.empty()) {
-        auto hint = CCLabelBMFont::create("Pick a mode to see its settings.", "chatFont.fnt");
-        hint->setScale(0.6f);
+        auto hint = CCLabelBMFont::create(
+            "Pick Watch or Trace to see its settings.", "chatFont.fnt", kPanelW - 40.f, kCCTextAlignmentCenter
+        );
+        hint->setScale(0.62f);
         hint->setColor(ccc3(190, 190, 190));
-        m_mainLayer->addChildAtPosition(hint, Anchor::TopLeft, ccp(180.f, -150.f));
+        m_mainLayer->addChildAtPosition(
+            hint, Anchor::TopLeft, ccp(kPanelX + kPanelW / 2.f, -(kPanelTop + kPanelH / 2.f - 6.f))
+        );
         m_dynamic.push_back(hint);
         return;
     }
 
-    float y = -126.f;
+    float y = kPanelTop + 16.f;
     for (auto const& [index, name] : rows) {
         this->addStepper(index, name, y);
-        y -= 22.f;
+        y += 21.f;
     }
+    this->addPackRow(y);
+    this->refresh();
 }
 
 void PracticePanel::addStepper(int index, char const* name, float y) {
     auto label = CCLabelBMFont::create(name, "chatFont.fnt");
     label->setScale(0.6f);
-    m_mainLayer->addChildAtPosition(label, Anchor::TopLeft, ccp(22.f, y), ccp(0.f, 0.5f));
+    m_mainLayer->addChildAtPosition(label, Anchor::TopLeft, ccp(kPanelX + 12.f, -y), ccp(0.f, 0.5f));
     m_dynamic.push_back(label);
 
-    float arrowsX = 232.f;
+    float ax = kPanelX + kPanelW - 76.f;
 
     auto leftSpr = CCSprite::createWithSpriteFrameName("edit_leftBtn_001.png");
-    leftSpr->setScale(0.75f);
+    leftSpr->setScale(0.72f);
     auto leftBtn = CCMenuItemSpriteExtra::create(leftSpr, this, menu_selector(PracticePanel::onStep));
     leftBtn->setTag(index * 2);
-    m_buttonMenu->addChildAtPosition(leftBtn, Anchor::TopLeft, ccp(arrowsX, y));
+    m_buttonMenu->addChildAtPosition(leftBtn, Anchor::TopLeft, ccp(ax, -y));
     m_dynamic.push_back(leftBtn);
 
     auto value = CCLabelBMFont::create("", "bigFont.fnt");
-    value->setScale(0.36f);
+    value->setScale(0.34f);
     m_values[index] = value;
-    m_mainLayer->addChildAtPosition(value, Anchor::TopLeft, ccp(arrowsX + 32.f, y));
+    m_mainLayer->addChildAtPosition(value, Anchor::TopLeft, ccp(ax + 31.f, -y));
     m_dynamic.push_back(value);
 
     auto rightSpr = CCSprite::createWithSpriteFrameName("edit_rightBtn_001.png");
-    rightSpr->setScale(0.75f);
+    rightSpr->setScale(0.72f);
     auto rightBtn = CCMenuItemSpriteExtra::create(rightSpr, this, menu_selector(PracticePanel::onStep));
     rightBtn->setTag(index * 2 + 1);
-    m_buttonMenu->addChildAtPosition(rightBtn, Anchor::TopLeft, ccp(arrowsX + 64.f, y));
+    m_buttonMenu->addChildAtPosition(rightBtn, Anchor::TopLeft, ccp(ax + 62.f, -y));
     m_dynamic.push_back(rightBtn);
+}
+
+void PracticePanel::addPackRow(float y) {
+    auto label = CCLabelBMFont::create("Click pack", "chatFont.fnt");
+    label->setScale(0.6f);
+    m_mainLayer->addChildAtPosition(label, Anchor::TopLeft, ccp(kPanelX + 12.f, -y), ccp(0.f, 0.5f));
+    m_dynamic.push_back(label);
+
+    auto selSpr = ButtonSprite::create("Select", 52, true, "goldFont.fnt", "GJ_button_02.png", 22.f, 0.5f);
+    auto sel = CCMenuItemSpriteExtra::create(selSpr, this, menu_selector(PracticePanel::onClickPack));
+    m_buttonMenu->addChildAtPosition(sel, Anchor::TopLeft, ccp(kPanelX + 104.f, -y));
+    m_dynamic.push_back(sel);
+
+    auto defSpr = ButtonSprite::create("Default", 52, true, "goldFont.fnt", "GJ_button_04.png", 22.f, 0.5f);
+    auto def = CCMenuItemSpriteExtra::create(defSpr, this, menu_selector(PracticePanel::onClickPackReset));
+    m_buttonMenu->addChildAtPosition(def, Anchor::TopLeft, ccp(kPanelX + 164.f, -y));
+    m_dynamic.push_back(def);
+
+    m_packName = CCLabelBMFont::create("", "chatFont.fnt");
+    m_packName->setColor(ccc3(200, 200, 200));
+    m_mainLayer->addChildAtPosition(m_packName, Anchor::TopLeft, ccp(kPanelX + 196.f, -y), ccp(0.f, 0.5f));
+    m_dynamic.push_back(m_packName);
 }
 
 void PracticePanel::refresh() {
@@ -208,32 +302,30 @@ void PracticePanel::refresh() {
         m_macroName->setColor(ccc3(255, 255, 255));
     }
     else {
-        m_macroName->setString("No macro loaded");
+        m_macroName->setString("No macro");
         m_macroName->setColor(ccc3(180, 180, 180));
     }
-    // keep long file names inside the popup
-    m_macroName->setScale(0.38f);
-    float maxW = 190.f;
-    if (m_macroName->getContentSize().width * 0.38f > maxW) {
-        m_macroName->setScale(maxW / m_macroName->getContentSize().width);
-    }
+    fitWidth(m_macroName, 0.38f, 76.f);
 
     m_macroInfo->setString(s.macroInfoLine().c_str());
-    m_warning->setString(s.levelMismatchWarning().c_str());
+    fitWidth(m_macroInfo, 0.55f, 210.f);
 
-    m_packLabel->setString(s.clickPackLabel().c_str());
-    m_packLabel->setScale(0.5f);
-    if (m_packLabel->getContentSize().width * 0.5f > 330.f) {
-        m_packLabel->setScale(330.f / m_packLabel->getContentSize().width);
-    }
+    std::string hint = s.levelMismatchWarning();
+    auto start = s.startPosHint();
+    if (!start.empty()) hint += (hint.empty() ? "" : "\n") + start;
+    m_hint->setString(hint.c_str());
 
-    for (int i = 0; i < 4; ++i) {
-        bool selected = s.engine.mode() == modeFromTag(i);
+    for (int i = 0; i < 2; ++i) {
+        bool selected = s.userMode == modeFromTag(2 + i);
         m_modeSprites[i]->updateBGImage(selected ? "GJ_button_01.png" : "GJ_button_04.png");
     }
 
-    for (int i = 0; i < 5; ++i) {
-        if (m_values[i]) m_values[i]->setString(stepValueText(i).c_str());
+    for (size_t i = 0; i < m_values.size(); ++i) {
+        if (m_values[i]) m_values[i]->setString(stepValueText(static_cast<int>(i)).c_str());
+    }
+    if (m_packName) {
+        m_packName->setString(s.clickPackName().c_str());
+        fitWidth(m_packName, 0.55f, kPanelX + kPanelW - 8.f - (kPanelX + 196.f));
     }
 }
 
@@ -241,15 +333,20 @@ void PracticePanel::onMode(CCObject* sender) {
     auto& s = mpr::Session::get();
     auto mode = modeFromTag(static_cast<CCNode*>(sender)->getTag());
 
+    if (mode == s.userMode) mode = mpr::Mode::Off; // pressing the selected mode again turns it off
     if (mode != mpr::Mode::Off && !s.engine.macro()) {
         FLAlertLayer::create("No macro", "Load a macro first.", "OK")->show();
         return;
     }
-    s.setMode(mode);
+    if (!s.ui.enabled && mode != mpr::Mode::Off) {
+        FLAlertLayer::create("Mod disabled", "Turn on <cy>Enable Mod</c> first.", "OK")->show();
+        return;
+    }
+    s.setUserMode(mode);
     this->rebuildSettings();
     this->refresh();
 
-    if (mode == mpr::Mode::Watch || mode == mpr::Mode::Trace) {
+    if (mode != mpr::Mode::Off) {
         FLAlertLayer::create(
             "Restart needed",
             "The macro drives the game from the start of the level.\n"
@@ -257,6 +354,28 @@ void PracticePanel::onMode(CCObject* sender) {
             "OK"
         )->show();
     }
+}
+
+void PracticePanel::onToggle(CCObject* sender) {
+    auto& s = mpr::Session::get();
+    auto* toggle = static_cast<CCMenuItemToggler*>(sender);
+    // the toggler flips *after* the callback, so the new state is the opposite of isToggled()
+    bool value = !toggle->isToggled();
+    switch (toggle->getTag()) {
+        case TagEnable: s.ui.enabled = value; break;
+        case TagIndicators: s.ui.indicators = value; break;
+        case TagBuffer: s.ui.buffer = value; break;
+        default: break;
+    }
+    if (!s.ui.enabled) s.userMode = mpr::Mode::Off;
+    s.settingsChanged();
+    this->rebuildSettings();
+    this->refresh();
+}
+
+void PracticePanel::onGear(CCObject* sender) {
+    int tag = static_cast<CCNode*>(sender)->getTag();
+    SettingsPopup::create(tag == TagBuffer ? SettingsPopup::Kind::Buffer : SettingsPopup::Kind::Indicators)->show();
 }
 
 void PracticePanel::onStep(CCObject* sender) {
@@ -267,7 +386,6 @@ void PracticePanel::onStep(CCObject* sender) {
 
     auto cfg = s.engine.config();
     switch (index) {
-        case StepMaxEarly: cfg.maxEarly = std::clamp(cfg.maxEarly + dir, 1, 60); break;
         case StepWindow: cfg.window = std::clamp(cfg.window + dir, 1, 60); break;
         case StepOffset: cfg.frameOffset = std::clamp(cfg.frameOffset + dir, -10, 10); break;
         case StepTps: {
@@ -277,6 +395,7 @@ void PracticePanel::onStep(CCObject* sender) {
             break;
         }
         case StepVolume: s.ui.macroVolume = std::clamp(s.ui.macroVolume + dir * 10, 0, 100); break;
+        case StepStartAdjust: s.ui.startAdjust = std::clamp(s.ui.startAdjust + dir, -10, 10); break;
         default: break;
     }
     s.pushConfig(cfg);
@@ -318,10 +437,6 @@ void PracticePanel::onClickPack(CCObject*) {
 void PracticePanel::onClickPackReset(CCObject*) {
     mpr::Session::get().resetClickPack();
     this->refresh();
-}
-
-void PracticePanel::onIndicators(CCObject*) {
-    IndicatorsPopup::create()->show();
 }
 
 void PracticePanel::onLoad(CCObject*) {
@@ -368,7 +483,7 @@ void PracticePanel::onRestart(CCObject*) {
 void PracticePanel::onLastResults(CCObject*) {
     auto& s = mpr::Session::get();
     if (!s.engine.active()) {
-        FLAlertLayer::create("No results", "Pick a mode and play a run first.", "OK")->show();
+        FLAlertLayer::create("No results", "Pick Watch or Trace and play a run first.", "OK")->show();
         return;
     }
     // live results of the current attempt (or the last finished one)
