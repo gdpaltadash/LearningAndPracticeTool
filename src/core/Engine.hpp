@@ -40,6 +40,7 @@ namespace mpr {
         int window = 8;          // match / scoring window, in frames (both directions)
         int frameOffset = 0;     // shifts the macro in time (compat with other bots' conventions)
         double gameTps = 0.0;    // physics ticks per second of the running game (0 = same as the macro)
+        bool ignoreP2 = false;   // single-player level: player 1 / player 2 flags do not matter when matching
     };
 
     /// An input that must now be forwarded to the game.
@@ -100,6 +101,7 @@ namespace mpr {
             int offset = 0;
             bool fixed = false;
             int fixedBy = 0;
+            bool mirror = false;   // p2 twin of a p1 input in a single-player level: not scored, not matched
         };
 
         // ---- setup -------------------------------------------------------
@@ -112,7 +114,8 @@ namespace mpr {
         std::shared_ptr<Macro const> const& macro() const { return m_macro; }
 
         void setConfig(Config const& cfg) {
-            bool changed = cfg.frameOffset != m_cfg.frameOffset || cfg.gameTps != m_cfg.gameTps;
+            bool changed = cfg.frameOffset != m_cfg.frameOffset || cfg.gameTps != m_cfg.gameTps ||
+                           cfg.ignoreP2 != m_cfg.ignoreP2;
             m_cfg = cfg;
             if (changed) rebuild();
         }
@@ -271,7 +274,7 @@ namespace mpr {
             double fixedFrames = 0.0;
 
             for (auto const& e : m_eff) {
-                if (e.skipped) continue;
+                if (e.skipped || e.mirror) continue;
                 if (e.matched) {
                     s.matched++;
                     s.total++;
@@ -341,6 +344,24 @@ namespace mpr {
             std::stable_sort(m_eff.begin(), m_eff.end(), [](Eff const& a, Eff const& b) {
                 return a.frame < b.frame;
             });
+            if (m_cfg.ignoreP2) {
+                for (size_t i = 0; i < m_eff.size(); ++i) {
+                    if (!m_eff[i].p2) continue;
+                    for (size_t j = i; j-- > 0 && m_eff[j].frame == m_eff[i].frame;) {
+                        if (!m_eff[j].p2 && m_eff[j].button == m_eff[i].button && m_eff[j].down == m_eff[i].down) {
+                            m_eff[i].mirror = true;
+                            break;
+                        }
+                    }
+                    if (m_eff[i].mirror) continue;
+                    for (size_t j = i + 1; j < m_eff.size() && m_eff[j].frame == m_eff[i].frame; ++j) {
+                        if (!m_eff[j].p2 && m_eff[j].button == m_eff[i].button && m_eff[j].down == m_eff[i].down) {
+                            m_eff[i].mirror = true;
+                            break;
+                        }
+                    }
+                }
+            }
             beginAttempt(m_rawProgress, m_shift);
         }
 
@@ -354,8 +375,9 @@ namespace mpr {
             for (size_t i = static_cast<size_t>(it - m_eff.begin()); i < m_eff.size(); ++i) {
                 auto const& e = m_eff[i];
                 if (e.frame > frame + earlyWin) break;
-                if (e.skipped || e.matched) continue;
-                if (e.button != button || e.p2 != p2 || e.down != down) continue;
+                if (e.skipped || e.matched || e.mirror) continue;
+                if (e.button != button || e.down != down) continue;
+                if (!m_cfg.ignoreP2 && e.p2 != p2) continue;
                 int64_t dist = std::abs(e.frame - frame);
                 if (dist < bestDist) {
                     bestDist = dist;
@@ -371,7 +393,8 @@ namespace mpr {
                 m_extra++;
                 int64_t best = INT64_MAX;
                 for (auto const& e : m_eff) {
-                    if (e.skipped || e.matched || e.button != r.button || e.p2 != r.p2 || e.down != r.down) continue;
+                    if (e.skipped || e.matched || e.mirror || e.button != r.button || e.down != r.down) continue;
+                    if (!m_cfg.ignoreP2 && e.p2 != r.p2) continue;
                     if (std::abs(e.frame - frame) < std::abs(best)) best = e.frame - frame;
                 }
                 if (best != INT64_MAX) {

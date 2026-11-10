@@ -507,6 +507,34 @@ static void testNearest() {
     CHECK(r2.extra && !r2.hasNearest);
 }
 
+static void testIgnoreP2() {
+    // macro flags its inputs as player 2, the user click arrives as player 1 (single-player level)
+    auto m = makeMacro({{100, 1, true, true}, {100, 1, false, true}, {110, 1, true, false}});
+    Engine e;
+    Config c;
+    c.ignoreP2 = true;
+    e.setConfig(c);
+    e.setMacro(m);
+    e.setMode(Mode::Trace);
+    e.beginAttempt(0);
+    auto r = e.onUserInput(101, 1, false, true);
+    CHECK(r.matched && r.offset == 1);
+    auto r2 = e.onUserInput(110, 1, false, false);
+    CHECK(r2.matched && r2.offset == 0);
+    auto s = e.summarize(500, true);
+    CHECK(s.total == 2 && s.missed == 0); // the p2 twin is not scored
+    Engine strict;
+    strict.setMacro(m);
+    strict.setMode(Mode::Trace);
+    strict.beginAttempt(0);
+    CHECK(strict.onUserInput(101, 1, false, true).matched); // p1 twin exists
+    Engine s2;
+    s2.setMacro(makeMacro({{100, 1, true, true}}));
+    s2.setMode(Mode::Trace);
+    s2.beginAttempt(0);
+    CHECK(s2.onUserInput(100, 1, false, true).extra);
+}
+
 int main() {
     testFixerDelaysEarlyClick();
     testFixerLateAndTooEarlyAreNotFixed();
@@ -528,6 +556,7 @@ int main() {
     testInputBuffer();
     testNeverShift();
     testNearest();
+    testIgnoreP2();
     testPathTable();
     if (g_fail == 0) std::printf("ALL TESTS PASSED\n");
     return g_fail == 0 ? 0 : 1;

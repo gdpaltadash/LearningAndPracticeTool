@@ -75,7 +75,7 @@ bool MacroHud::init() {
     m_flash = CCLabelBMFont::create("", "bigFont.fnt");
     m_flash->setScale(0.38f);
     m_flash->setOpacity(0);
-    m_flash->setPosition(ccp(-kLaneWidth / 2.f + kLaneWidth * kNowFraction, kLaneHeight / 2.f + 34.f));
+    m_flash->setPosition(ccp(0.f, kLaneHeight / 2.f + 34.f));
     this->addChild(m_flash, 3);
 
     this->setVisible(false);

@@ -43,7 +43,7 @@ namespace mpr {
         ui.indicatorType = static_cast<IndicatorType>(std::clamp(mod->getSavedValue<int>("indicator-type", 2), 0, 2));
         ui.dotSize = std::clamp(mod->getSavedValue<int>("dot-size", 6), 2, 14);
         ui.lineWidth = std::clamp(mod->getSavedValue<int>("line-width", 2), 1, 8);
-        ui.macroVolume = std::clamp(mod->getSavedValue<int>("macro-volume", 60), 0, 100);
+        ui.macroVolume = std::clamp(mod->getSavedValue<int>("macro-volume", 60), 0, 250);
 
         auto readColor = [&](char const* key, ccColor3B def) {
             int packed = mod->getSavedValue<int>(key, (def.r << 16) | (def.g << 8) | def.b);
@@ -453,6 +453,11 @@ namespace mpr {
         completeHandled = false;
         reached = 0;
         m_platformer = pl->m_levelSettings && pl->m_levelSettings->m_platformerMode;
+        {
+            auto c = engine.config();
+            c.ignoreP2 = !(pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode);
+            engine.setConfig(c);
+        }
         tryAutoLoadForLevel(pl->m_level);
         // a macro never starts driving the game by itself
         userMode = Mode::Off;

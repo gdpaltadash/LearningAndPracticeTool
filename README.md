@@ -20,7 +20,7 @@ Pausa el nivel y pulsa el botón del mod (abajo a la derecha). La ventana tiene:
 
 - **Enable Mod** (arriba a la derecha): interruptor general. Apagado, el mod no hace nada.
 - **Load / Unload**: importa o quita la macro (se detecta el formato solo). Se recuerda por nivel.
-- **Practice Mode**: **Watch** (la macro juega con click sounds, tus inputs se ignoran) y **Trace** (la macro juega y tus clicks solo se miden: precisión en vivo y reporte). Pulsar el modo ya elegido lo apaga. Al elegir un modo, el panel **Settings** de la derecha muestra solo sus ajustes: `Scoring window` (Trace), `Macro frame offset`, `Game TPS`, `Click volume` (0 = sin sonido), `StartPos adjust` y el **Click pack** (una carpeta de sonidos para todas las macros; los releases son archivos/carpetas con `release` en el nombre).
+- **Practice Mode**: **Watch** (la macro juega con click sounds, tus inputs se ignoran) y **Trace** (la macro juega y tus clicks solo se miden: precisión en vivo y reporte). Pulsar el modo ya elegido lo apaga. Al elegir un modo, el panel **Settings** de la derecha muestra solo sus ajustes: `Scoring window` (Trace), `Macro frame offset`, `Game TPS`, `Click volume` (0 = sin sonido, hasta 250%), `StartPos adjust` y el **Click pack** (una carpeta de sonidos para todas las macros; los releases son archivos/carpetas con `release` en el nombre).
 - **Click Indicators** (switch + engrane): dos tipos, elegibles en el engrane (`Lane` / `Dot` / `Both`).
   - **Lane**: carril abajo en pantalla con un círculo por press y otro por release (mismo tamaño, distinto color).
   - **Dot**: un punto dentro del nivel, en el lugar exacto donde ocurre cada input (press o release), con `Dot size`. La **hold line** (opcional) une el punto de press con el de release en el nivel, con color, opacidad y grosor (`Hold line width`) configurables; en el carril también se dibuja entre los círculos.
@@ -60,6 +60,8 @@ Los puntos dentro del nivel y la sincronización de StartPos salen de esa misma 
 - **Opacidad muy alta**: el dibujo ahora mezcla con alpha premultiplicado (antes un valor bajo seguía viéndose brillante), el carril también escala con la opacidad, y el mínimo bajó de 5% a 1% (pasos de 1 por debajo de 10%).
 
 - **Detección automática (Auto)**: la fila **Macro starts at** tiene ahora `Auto` (por defecto), `Level start` y `StartPos`. En Auto el mod decide solo, por macro, si empieza en el 0% o en un StartPos, y lo recuerda: si empiezas desde un StartPos y no hay recorrido guardado para sincronizar, asume que la macro se grabó desde ese StartPos; si luego ve que no encaja (varios clicks de Trace muy lejos, o la macro muere en los primeros 2.5 s), cambia de hipótesis y te avisa con `Restart the level`. Si prefieres decidirlo tú, pulsa `Level start` o `StartPos`.
+
+- **Trace: "No match" aunque clickees justo en el input** (y el mensaje sin número): era el flag de jugador. En niveles de 1 jugador el mod ya no distingue P1 y P2 al emparejar, y el gemelo P2 de un input P1 no se puntúa dos veces. El mensaje "No match" / "Perfect" sale ahora centrado en pantalla.
 
 ## Estructura
 

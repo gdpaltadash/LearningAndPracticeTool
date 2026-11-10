@@ -445,7 +445,7 @@ void PracticePanel::onStep(CCObject* sender) {
             cfg.gameTps = static_cast<double>(kTpsValues[i]);
             break;
         }
-        case StepVolume: s.ui.macroVolume = std::clamp(s.ui.macroVolume + dir * 10, 0, 100); break;
+        case StepVolume: s.ui.macroVolume = std::clamp(s.ui.macroVolume + dir * 10, 0, 250); break;
         case StepStartAdjust: s.ui.startAdjust = std::clamp(s.ui.startAdjust + dir, -10, 10); break;
         default: break;
     }
