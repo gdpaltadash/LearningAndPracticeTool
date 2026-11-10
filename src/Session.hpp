@@ -14,12 +14,19 @@ class MacroHud;
 namespace mpr {
 
     struct UiSettings {
-        bool macroSounds = true;
-        bool userSounds = true;
         bool showLane = true;
         bool showDots = true;
-        int macroVolume = 60; // percent
-        int userVolume = 50;  // percent
+        int macroVolume = 60; // percent, 0 = no click sounds
+
+        // click indicators (lane + in-level): both are circles, only the color differs
+        cocos2d::ccColor3B pressColor = {80, 242, 128};
+        cocos2d::ccColor3B releaseColor = {255, 115, 102};
+        int indicatorOpacity = 90; // percent
+
+        // line from the press indicator to its release indicator (shows how long to hold)
+        bool holdLine = true;
+        cocos2d::ccColor3B holdColor = {255, 255, 255};
+        int holdOpacity = 55; // percent
     };
 
     /// Data shown by the results popup.
@@ -77,10 +84,19 @@ namespace mpr {
 
         ResultsData makeResults(bool finished) const;
 
-        // ---- audio ----
-        void playClick(bool down, bool user);
+        // ---- click pack (one pack for every macro) ----
+        std::string clickPackPath;                 // empty = built-in sounds
+        std::vector<std::filesystem::path> packClicks;
+        std::vector<std::filesystem::path> packReleases;
+        void setClickPack(std::filesystem::path const& folder);
+        void resetClickPack();
+        std::string clickPackLabel() const;
+
+        // ---- audio (only macro-driven inputs make sound) ----
+        void playClick(bool down);
 
     private:
+        void scanClickPack();
         void rememberMacroForLevel();
         void tryAutoLoadForLevel(GJGameLevel* level);
         int m_levelId = 0;

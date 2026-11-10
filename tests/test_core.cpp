@@ -6,6 +6,7 @@
 #include <gdr/gdr.hpp>
 
 #include <cstdio>
+#include <cstring>
 #include <cstdlib>
 #include <vector>
 
@@ -291,6 +292,67 @@ static void testLoadRejectsGarbage() {
     }
 }
 
+static std::vector<uint8_t> bytes(std::string const& s) { return std::vector<uint8_t>(s.begin(), s.end()); }
+static void put32(std::vector<uint8_t>& v, uint32_t x) { for (int i = 0; i < 4; i++) v.push_back((x >> (8 * i)) & 0xff); }
+
+static void testOtherFormats() {
+    // MegaHack JSON
+    auto a = loadMacro(bytes(R"({"_":"x","meta":{"fps":240},"events":[{"frame":10,"down":true},{"frame":20,"down":false},{"frame":30,"x":1.5,"y":2},{"frame":40,"down":true,"p2":true}]})"), "a.mhr.json");
+    CHECK(a.ok());
+    if (a.ok()) {
+        CHECK(a.macro->inputs.size() == 3 && a.macro->fps == 240.0);
+        CHECK(a.macro->inputs[0].down && !a.macro->inputs[1].down && a.macro->inputs[2].p2);
+    }
+    // MegaHack binary
+    std::vector<uint8_t> m = {0x48, 0x41, 0x43, 0x4B, 0x50, 0x52, 0x4F, 0x07};
+    put32(m, 4); put32(m, 360); put32(m, 0); put32(m, 0); put32(m, 32); put32(m, 2);
+    for (int i = 0; i < 2; i++) {
+        m.push_back(1); m.push_back(0); m.push_back(i == 0 ? 1 : 0); m.push_back(i == 1 ? 1 : 0);
+        put32(m, 100 + i * 50);
+        for (int k = 0; k < 24; k++) m.push_back(0);
+    }
+    auto b = loadMacro(m, "b.mhr");
+    CHECK(b.ok());
+    if (b.ok()) {
+        CHECK(b.macro->fps == 360.0 && b.macro->inputs.size() == 2);
+        CHECK(b.macro->inputs[0].frame == 100 && b.macro->inputs[0].down && !b.macro->inputs[0].p2);
+        CHECK(b.macro->inputs[1].frame == 150 && !b.macro->inputs[1].down && b.macro->inputs[1].p2);
+    }
+    // plain text
+    auto c = loadMacro(bytes("240\n5 1 0\n9 0 0\n12 1 1\n"), "c.txt");
+    CHECK(c.ok());
+    if (c.ok()) CHECK(c.macro->inputs.size() == 3 && c.macro->inputs[2].p2 && c.macro->inputs[1].frame == 9);
+    // xdBot
+    auto d = loadMacro(bytes("240\r\n5|1|1|1|0\r\n9|0|1|1|0\r\n12|1|1|0|0\r\n"), "d.txt");
+    CHECK(d.ok());
+    if (d.ok()) CHECK(d.macro->botName == "xdBot" && d.macro->inputs[2].p2 && !d.macro->inputs[0].p2);
+    // TASBot
+    auto e = loadMacro(bytes(R"({"fps":120,"macro":[{"frame":3,"player_1":{"click":1,"x_position":0},"player_2":{"click":0,"x_position":0}},{"frame":8,"player_1":{"click":2,"x_position":0},"player_2":{"click":1,"x_position":0}}]})"), "e.json");
+    CHECK(e.ok());
+    if (e.ok()) CHECK(e.macro->inputs.size() == 3 && e.macro->fps == 120.0);
+    // Echo
+    auto f = loadMacro(bytes(R"({"fps":240,"inputs":[{"frame":4,"holding":true},{"frame":9,"holding":false,"player_2":false}]})"), "f.json");
+    CHECK(f.ok() && f.macro->inputs.size() == 2);
+    // zBot
+    std::vector<uint8_t> z;
+    float delta = 1.f / 240.f, speed = 1.f;
+    uint8_t raw[4];
+    std::memcpy(raw, &delta, 4); z.insert(z.end(), raw, raw + 4);
+    std::memcpy(raw, &speed, 4); z.insert(z.end(), raw, raw + 4);
+    put32(z, 20); z.push_back(0x31); z.push_back(0x31);
+    put32(z, 31); z.push_back(0x30); z.push_back(0x31);
+    auto g = loadMacro(z, "g.zbf");
+    CHECK(g.ok());
+    if (g.ok()) CHECK(g.macro->fps == 240.0 && g.macro->inputs.size() == 2 && g.macro->inputs[0].down && !g.macro->inputs[1].down);
+    auto g2 = loadMacro(z, "noext");
+    CHECK(g2.ok());
+    // junk of every kind must not crash
+    for (size_t cut = 4; cut < m.size(); cut += 3) (void)loadMacro(std::vector<uint8_t>(m.begin(), m.begin() + cut), "t.mhr");
+    (void)loadMacro(bytes("{\"events\":[{\"frame\":"), "t.json");
+    (void)loadMacro(bytes("240\n1|1\n"), "t.txt");
+    CHECK(!loadMacro(bytes("{\"foo\":1}"), "x.json").ok());
+}
+
 int main() {
     testFixerDelaysEarlyClick();
     testFixerLateAndTooEarlyAreNotFixed();
@@ -307,6 +369,7 @@ int main() {
     testLoadGdr2();
     testLoadGdr2Platformer();
     testLoadRejectsGarbage();
+    testOtherFormats();
     if (g_fail == 0) std::printf("ALL TESTS PASSED\n");
     return g_fail == 0 ? 0 : 1;
 }

@@ -4,9 +4,12 @@
 		"win": "2.2081"
 	},
 	"version": "v0.1.0",
-	"id": "yourname.macro-practice",
-	"name": "Macro Practice",
-	"developer": "yourname",
+	"id": "paltadash.practice-tool",
+	"name": "PaltaDash's Practice Tool",
+	"developer": "PaltaDash",
 	"description": "Learn a level from a macro: fix early inputs, watch with click sounds, or trace over the macro and get scored.",
-	"tags": ["utility", "gameplay"]
+	"tags": ["utility", "gameplay"],
+	"resources": {
+		"sprites": ["resources/macro-button.png"]
+	}
 }

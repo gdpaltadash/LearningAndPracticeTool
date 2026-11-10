@@ -46,7 +46,6 @@ class $modify(MPGameLayer, GJBaseGameLayer) {
         // feedback for what the player did
         if (session.engine.mode() != mpr::Mode::Watch) {
             if (session.hud) session.hud->onUser(result);
-            session.playClick(down, true);
         }
 
         if (result.swallow) return; // Watch / Trace: ignored. Early Fix: forwarded later by us.
@@ -142,10 +141,10 @@ class $modify(MPPauseLayer, PauseLayer) {
 
         CCNode* spr = CCSprite::create("macro-button.png"_spr);
         if (spr) {
-            spr->setScale(0.62f);
+            spr->setScale(0.55f);
         }
         else {
-            spr = ButtonSprite::create("Macro Practice", 130, true, "goldFont.fnt", "GJ_button_01.png", 28.f, 0.6f);
+            spr = ButtonSprite::create("Practice Tool", 110, true, "goldFont.fnt", "GJ_button_01.png", 28.f, 0.6f);
         }
         auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(MPPauseLayer::onMacroPractice));
 

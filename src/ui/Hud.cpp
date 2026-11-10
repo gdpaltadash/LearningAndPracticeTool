@@ -2,6 +2,8 @@
 
 #include "../Session.hpp"
 
+#include <map>
+
 using namespace geode::prelude;
 
 namespace {
@@ -19,6 +21,10 @@ namespace {
         if (offset == 0) return col(1.f, 0.88f, 0.25f);   // perfect
         if (offset < 0) return col(0.35f, 0.7f, 1.f);     // early
         return col(1.f, 0.55f, 0.2f);                     // late
+    }
+
+    ccColor4F fromRgb(ccColor3B c, float a) {
+        return ccColor4F{c.r / 255.f, c.g / 255.f, c.b / 255.f, a};
     }
 
     ccColor3B toRgb(ccColor4F c) {
@@ -206,24 +212,31 @@ void MacroHud::drawLane(mpr::Engine const& engine, double nowFrame) {
         return e.frame < f;
     });
 
-    // macro inputs: circle = press, diamond = release
+    this->rebuildPairs(engine);
+    float baseA = static_cast<float>(s.ui.indicatorOpacity) / 100.f;
+    auto laneY = [](bool p2) { return p2 ? -4.f : 3.f; };
+
+    // hold lines first so the circles sit on top of them
+    if (s.ui.holdLine) {
+        auto lineColor = fromRgb(s.ui.holdColor, static_cast<float>(s.ui.holdOpacity) / 100.f);
+        for (auto const& pr : m_pairs) {
+            auto const& d = inputs[pr.down];
+            auto const& u = inputs[pr.up];
+            if (d.skipped || u.frame < lo || d.frame > hi) continue;
+            float x1 = std::max(xOf(static_cast<double>(d.frame)), left + 1.f);
+            float x2 = std::min(xOf(static_cast<double>(u.frame)), right - 1.f);
+            if (x2 <= x1) continue;
+            m_lane->drawSegment(ccp(x1, laneY(d.p2)), ccp(x2, laneY(d.p2)), 1.6f, lineColor);
+        }
+    }
+
+    // macro inputs: both circles, press and release only differ in color
     for (; it != inputs.end() && it->frame <= hi; ++it) {
         if (it->skipped) continue;
         float x = xOf(static_cast<double>(it->frame));
-        float y = it->p2 ? -4.f : 3.f;
-
         bool done = it->matched || it->injected;
-        float alpha = done ? 0.35f : 1.f;
-        ccColor4F c = it->down ? col(0.3f, 0.95f, 0.5f, alpha) : col(1.f, 0.45f, 0.4f, alpha);
-        if (it->p2) c = it->down ? col(0.35f, 0.85f, 1.f, alpha) : col(0.9f, 0.5f, 1.f, alpha);
-
-        if (it->down) {
-            m_lane->drawDot(ccp(x, y), 4.f, c);
-        }
-        else {
-            CCPoint d[4] = { ccp(x - 4.f, y), ccp(x, y - 4.f), ccp(x + 4.f, y), ccp(x, y + 4.f) };
-            m_lane->drawPolygon(d, 4, c, 0.f, c);
-        }
+        float alpha = baseA * (done ? 0.4f : 1.f);
+        m_lane->drawDot(ccp(x, laneY(it->p2)), 4.f, fromRgb(it->down ? s.ui.pressColor : s.ui.releaseColor, alpha));
     }
 
     // what the player actually did this attempt
@@ -242,7 +255,6 @@ void MacroHud::drawLane(mpr::Engine const& engine, double nowFrame) {
 
     // "now" line on top
     m_lane->drawSegment(ccp(nowX, bottom - 3.f), ccp(nowX, top + 3.f), 1.4f, col(1.f, 1.f, 1.f, 0.95f));
-    (void)s;
 }
 
 void MacroHud::drawWorld(mpr::Engine const& engine, CCPoint playerPos) {
@@ -255,6 +267,25 @@ void MacroHud::drawWorld(mpr::Engine const& engine, CCPoint playerPos) {
 
     constexpr float kBehind = 120.f;
     constexpr float kAhead = 1400.f;
+    float baseA = static_cast<float>(s.ui.indicatorOpacity) / 100.f;
+
+    auto visible = [&](CCPoint const& p) {
+        return p.x >= playerPos.x - kBehind && p.x <= playerPos.x + kAhead;
+    };
+
+    // hold lines: from where the press happened to where the release happened
+    if (s.ui.holdLine) {
+        this->rebuildPairs(engine);
+        auto lineColor = fromRgb(s.ui.holdColor, static_cast<float>(s.ui.holdOpacity) / 100.f);
+        for (auto const& pr : m_pairs) {
+            if (!pos[pr.down] || !pos[pr.up]) continue;
+            if (inputs[pr.down].skipped) continue;
+            CCPoint a = *pos[pr.down];
+            CCPoint b = *pos[pr.up];
+            if (!visible(a) && !visible(b)) continue;
+            m_world->drawSegment(a, b, 2.f, lineColor);
+        }
+    }
 
     for (size_t i = 0; i < inputs.size(); ++i) {
         if (!pos[i]) continue;
@@ -262,19 +293,32 @@ void MacroHud::drawWorld(mpr::Engine const& engine, CCPoint playerPos) {
         if (e.skipped) continue;
 
         CCPoint p = *pos[i];
-        if (p.x < playerPos.x - kBehind || p.x > playerPos.x + kAhead) continue;
+        if (!visible(p)) continue;
 
         bool done = e.matched || e.injected;
-        float alpha = done ? 0.3f : 0.85f;
-        ccColor4F c = e.down ? col(0.3f, 0.95f, 0.5f, alpha) : col(1.f, 0.45f, 0.4f, alpha);
-        if (e.p2) c = e.down ? col(0.35f, 0.85f, 1.f, alpha) : col(0.9f, 0.5f, 1.f, alpha);
+        float alpha = baseA * (done ? 0.4f : 1.f);
+        m_world->drawDot(p, 6.f, fromRgb(e.down ? s.ui.pressColor : s.ui.releaseColor, alpha));
+    }
+}
 
-        if (e.down) {
-            m_world->drawDot(p, 6.f, c);
+void MacroHud::rebuildPairs(mpr::Engine const& engine) {
+    auto const* key = engine.macro().get();
+    auto const& inputs = engine.inputs();
+    if (key == m_pairsFor && inputs.size() == m_pairsSize) return;
+    m_pairsFor = key;
+    m_pairsSize = inputs.size();
+    m_pairs.clear();
+
+    // open press per (player, button)
+    std::map<std::pair<bool, int>, size_t> open;
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        auto k = std::make_pair(inputs[i].p2, inputs[i].button);
+        if (inputs[i].down) {
+            open[k] = i;
         }
-        else {
-            CCPoint d[4] = { ccp(p.x - 6.f, p.y), ccp(p.x, p.y - 6.f), ccp(p.x + 6.f, p.y), ccp(p.x, p.y + 6.f) };
-            m_world->drawPolygon(d, 4, c, 0.f, c);
+        else if (auto f = open.find(k); f != open.end()) {
+            m_pairs.push_back({f->second, i});
+            open.erase(f);
         }
     }
 }

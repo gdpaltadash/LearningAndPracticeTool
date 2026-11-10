@@ -1,4 +1,4 @@
-# Macro Practice
+# PaltaDash's Practice Tool
 
 Learn a level from a macro. Import a **GDR2** macro (zBot and other GDR bots) from the pause menu and pick a mode:
 
@@ -10,4 +10,4 @@ Click dots are shown on a scrolling lane at the bottom of the screen and inside 
 
 **Nothing is saved while a mode is active** - no progress, attempts, stats or completions. This is a practice tool, not for verified runs.
 
-Open it from the pause menu: **Macro Practice**.
+Open it from the pause menu: the mod's button.

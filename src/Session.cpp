@@ -3,6 +3,9 @@
 #include "ui/Hud.hpp"
 #include "ui/ResultsPopup.hpp"
 
+#include <cctype>
+#include <cstdlib>
+
 #include <Geode/utils/file.hpp>
 #include <Geode/utils/string.hpp>
 
@@ -27,12 +30,27 @@ namespace mpr {
         cfg.gameTps = static_cast<double>(std::clamp(mod->getSavedValue<int>("game-tps", 0), 0, 2000));
         engine.setConfig(cfg);
 
-        ui.macroSounds = mod->getSavedValue<bool>("macro-sounds", true);
-        ui.userSounds = mod->getSavedValue<bool>("user-sounds", true);
         ui.showLane = mod->getSavedValue<bool>("show-lane", true);
         ui.showDots = mod->getSavedValue<bool>("show-dots", true);
         ui.macroVolume = std::clamp(mod->getSavedValue<int>("macro-volume", 60), 0, 100);
-        ui.userVolume = std::clamp(mod->getSavedValue<int>("user-volume", 50), 0, 100);
+
+        auto readColor = [&](char const* key, ccColor3B def) {
+            int packed = mod->getSavedValue<int>(key, (def.r << 16) | (def.g << 8) | def.b);
+            return ccColor3B{
+                static_cast<GLubyte>((packed >> 16) & 0xff),
+                static_cast<GLubyte>((packed >> 8) & 0xff),
+                static_cast<GLubyte>(packed & 0xff)
+            };
+        };
+        ui.pressColor = readColor("press-color", ui.pressColor);
+        ui.releaseColor = readColor("release-color", ui.releaseColor);
+        ui.holdColor = readColor("hold-color", ui.holdColor);
+        ui.indicatorOpacity = std::clamp(mod->getSavedValue<int>("indicator-opacity", 90), 5, 100);
+        ui.holdOpacity = std::clamp(mod->getSavedValue<int>("hold-opacity", 55), 5, 100);
+        ui.holdLine = mod->getSavedValue<bool>("hold-line", true);
+
+        auto pack = mod->getSavedValue<std::string>("click-pack", "");
+        if (!pack.empty()) setClickPack(std::filesystem::u8path(pack));
     }
 
     void Session::saveSettings() {
@@ -42,12 +60,17 @@ namespace mpr {
         mod->setSavedValue<int>("window", cfg.window);
         mod->setSavedValue<int>("frame-offset", cfg.frameOffset);
         mod->setSavedValue<int>("game-tps", static_cast<int>(cfg.gameTps));
-        mod->setSavedValue<bool>("macro-sounds", ui.macroSounds);
-        mod->setSavedValue<bool>("user-sounds", ui.userSounds);
         mod->setSavedValue<bool>("show-lane", ui.showLane);
         mod->setSavedValue<bool>("show-dots", ui.showDots);
         mod->setSavedValue<int>("macro-volume", ui.macroVolume);
-        mod->setSavedValue<int>("user-volume", ui.userVolume);
+        auto packColor = [](ccColor3B c) { return (c.r << 16) | (c.g << 8) | c.b; };
+        mod->setSavedValue<int>("press-color", packColor(ui.pressColor));
+        mod->setSavedValue<int>("release-color", packColor(ui.releaseColor));
+        mod->setSavedValue<int>("hold-color", packColor(ui.holdColor));
+        mod->setSavedValue<int>("indicator-opacity", ui.indicatorOpacity);
+        mod->setSavedValue<int>("hold-opacity", ui.holdOpacity);
+        mod->setSavedValue<bool>("hold-line", ui.holdLine);
+        mod->setSavedValue<std::string>("click-pack", clickPackPath);
     }
 
     void Session::pushConfig(Config const& cfg) {
@@ -113,7 +136,7 @@ namespace mpr {
 
     std::string Session::macroInfoLine() const {
         auto const& m = engine.macro();
-        if (!m) return "Import a GDR2 macro to start.";
+        if (!m) return "Load a macro to start.";
         std::string bot = m->botName.empty() ? "unknown bot" : m->botName;
         std::string line = fmt::format("{:.0f} TPS  -  {} inputs  -  {}", m->fps, m->inputs.size(), bot);
         if (m->platformer) line += "  -  platformer";
@@ -222,7 +245,7 @@ namespace mpr {
     void Session::onInjected(GJBaseGameLayer* layer, Due const& due) {
         // click sound for macro-driven inputs (Watch / Trace)
         if (due.fromMacro) {
-            playClick(due.down, false);
+            playClick(due.down);
 
             if (due.macroIdx >= 0 && static_cast<size_t>(due.macroIdx) < positions.size()) {
                 PlayerObject* p = (due.p2 && layer->m_player2) ? layer->m_player2 : layer->m_player1;
@@ -231,18 +254,88 @@ namespace mpr {
         }
     }
 
+    // -------------------------------------------------------------- click pack
+
+    void Session::scanClickPack() {
+        packClicks.clear();
+        packReleases.clear();
+        if (clickPackPath.empty()) return;
+
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        fs::path root = fs::u8path(clickPackPath);
+        if (!fs::is_directory(root, ec)) return;
+
+        auto lower = [](std::string s) {
+            for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return s;
+        };
+
+        size_t seen = 0;
+        for (fs::recursive_directory_iterator it(root, fs::directory_options::skip_permission_denied, ec), end;
+             !ec && it != end && seen < 5000; it.increment(ec)) {
+            std::error_code e2;
+            if (!it->is_regular_file(e2)) continue;
+            seen++;
+
+            auto ext = lower(geode::utils::string::pathToString(it->path().extension()));
+            if (ext != ".wav" && ext != ".mp3" && ext != ".ogg" && ext != ".flac") continue;
+
+            // judge by the path inside the pack: "release", "releases", "rel_3.wav"...
+            auto rel = lower(geode::utils::string::pathToString(fs::relative(it->path(), root, e2)));
+            bool isRelease = rel.find("release") != std::string::npos;
+            if (!isRelease) {
+                auto stem = lower(geode::utils::string::pathToString(it->path().stem()));
+                isRelease = stem.rfind("rel", 0) == 0 && stem.rfind("relax", 0) != 0;
+            }
+            // hold / loop sounds are not single clicks
+            if (rel.find("hold") != std::string::npos && !isRelease) continue;
+            (isRelease ? packReleases : packClicks).push_back(it->path());
+        }
+    }
+
+    void Session::setClickPack(std::filesystem::path const& folder) {
+        clickPackPath = geode::utils::string::pathToString(folder);
+        scanClickPack();
+        Mod::get()->setSavedValue<std::string>("click-pack", clickPackPath);
+    }
+
+    void Session::resetClickPack() {
+        clickPackPath.clear();
+        packClicks.clear();
+        packReleases.clear();
+        Mod::get()->setSavedValue<std::string>("click-pack", "");
+    }
+
+    std::string Session::clickPackLabel() const {
+        if (clickPackPath.empty()) return "Click pack: built-in";
+        if (packClicks.empty() && packReleases.empty()) return "Click pack: no sounds found (using built-in)";
+        auto name = geode::utils::string::pathToString(std::filesystem::u8path(clickPackPath).filename());
+        return fmt::format("Click pack: {} ({} clicks, {} releases)", name, packClicks.size(), packReleases.size());
+    }
+
     // ------------------------------------------------------------------- audio
 
-    void Session::playClick(bool down, bool user) {
-        if (user ? !ui.userSounds : !ui.macroSounds) return;
-        float volume = static_cast<float>(user ? ui.userVolume : ui.macroVolume) / 100.f;
-        if (volume <= 0.f) return;
+    void Session::playClick(bool down) {
+        if (ui.macroVolume <= 0) return;
+        float volume = static_cast<float>(ui.macroVolume) / 100.f;
 
-        auto path = geode::utils::string::pathToString(
-            Mod::get()->getResourcesDir() / (down ? "click.wav" : "release.wav")
-        );
-        float speed = user ? 1.12f : 1.f;
-        FMODAudioEngine::sharedEngine()->playEffect(path, speed, 0.f, volume);
+        auto& list = down ? packClicks : packReleases;
+        std::string path;
+        if (!list.empty()) {
+            path = geode::utils::string::pathToString(list[static_cast<size_t>(rand()) % list.size()]);
+        }
+        else if (down || packClicks.empty()) {
+            // a pack without releases is fine: releases are just silent then
+            if (!down && !packClicks.empty()) return;
+            path = geode::utils::string::pathToString(
+                Mod::get()->getResourcesDir() / (down ? "click.wav" : "release.wav")
+            );
+        }
+        else {
+            return;
+        }
+        FMODAudioEngine::sharedEngine()->playEffect(path, 1.f, 0.f, volume);
     }
 
 }

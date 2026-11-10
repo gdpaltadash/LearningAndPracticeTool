@@ -32,4 +32,11 @@ private:
     cocos2d::CCLabelBMFont* m_flash = nullptr;
     float m_flashTimer = 0.f;
     float m_statusTimer = 0.f;
+
+    /// press -> release pairs (indices into engine.inputs()), rebuilt when the macro changes
+    struct Pair { size_t down; size_t up; };
+    std::vector<Pair> m_pairs;
+    void const* m_pairsFor = nullptr;
+    size_t m_pairsSize = 0;
+    void rebuildPairs(mpr::Engine const& engine);
 };
